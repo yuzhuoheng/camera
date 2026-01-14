@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str
     MINIO_BUCKET_NAME: str = "camera-server-photos"
     MINIO_SECURE: bool = False
-    MINIO_PUBLIC_HOST: Optional[str] = None
+    
+    # 外部访问地址 (包含协议和域名/IP:端口)
+    # 例如: https://hos-studio.supcon.com
+    # 如果不设置，默认使用 http/https + MINIO_ENDPOINT
+    MINIO_EXTERNAL_ENDPOINT: Optional[str] = None
     
     # Security
     SECRET_KEY: str

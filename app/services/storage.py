@@ -51,9 +51,14 @@ class MinioClient:
             # Return URL
             # Note: This constructs the URL manually or you can use presigned_get_object
             # For public access (if policy allowed):
+            if settings.MINIO_EXTERNAL_ENDPOINT:
+                # 去除末尾的斜杠（如果用户不小心加了）
+                base_url = settings.MINIO_EXTERNAL_ENDPOINT.rstrip("/")
+                return f"{base_url}/{self.bucket_name}/{file_name}"
+            
+            # Fallback to internal endpoint config
             protocol = "https" if settings.MINIO_SECURE else "http"
-            host = settings.MINIO_PUBLIC_HOST or settings.MINIO_ENDPOINT
-            return f"{protocol}://{host}/{self.bucket_name}/{file_name}"
+            return f"{protocol}://{settings.MINIO_ENDPOINT}/{self.bucket_name}/{file_name}"
         except S3Error as e:
             print(f"Error uploading file: {e}")
             raise e
