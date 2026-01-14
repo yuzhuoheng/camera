@@ -68,6 +68,27 @@ uvicorn app.main:app --reload
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
+
+
+
+### 5. Docker 部署
+
+构建镜像：
+
+```bash
+docker build -t camera-server .
+```
+
+运行容器：
+
+```bash
+docker run -d \
+  --name camera-server \
+  -p 8000:8000 \
+  --env-file .env \
+  camera-server
+```
+
 ## 目录结构
 
 ```
