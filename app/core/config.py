@@ -3,8 +3,8 @@ from functools import lru_cache
 from typing import Optional
 
 class Settings(BaseSettings):
-    API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "Camera Server"
+    API_V1_STR: str = "/cs-server/api/v1"
+    PROJECT_NAME: str = "一册一刻"
     
     # Database
     POSTGRES_USER: str
