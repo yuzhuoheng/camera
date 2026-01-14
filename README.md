@@ -82,11 +82,7 @@ docker build -t camera-server .
 运行容器：
 
 ```bash
-docker run -d \
-  --name camera-server \
-  -p 8000:8000 \
-  --env-file .env \
-  camera-server
+docker run -d --name camera-server --network host -p 8000:8000 --env-file .env  camera-server
 ```
 
 ## 目录结构
