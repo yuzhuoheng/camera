@@ -1,0 +1,162 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.core.config import get_settings
+from app.core.security import create_access_token
+from app.models import models
+from app.schemas.auth import LoginRequest
+from app.schemas.token import Token
+from app.schemas.user import User, UserUpdate
+from app.core.deps import get_current_user
+from app.services.storage import minio_client
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+import uuid
+import os
+import httpx
+
+router = APIRouter()
+settings = get_settings()
+
+@router.post("/avatar", response_model=User)
+async def update_user_avatar(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    用户头像上传接口
+    1. 接收文件
+    2. 上传到 MinIO
+    3. 更新用户 avatar_url
+    """
+    # 1. 校验文件
+    ext = os.path.splitext(file.filename)[1]
+    if not ext:
+        ext = ".jpg"
+    
+    # 2. 生成文件名 (users/{user_id}/avatar.jpg)
+    object_name = f"users/{current_user.id}/avatar{ext}"
+    
+    try:
+        # 3. 检查并删除旧头像（如果存在且不是当前新文件）
+        if current_user.avatar_url:
+            # 简单判断是否为 MinIO 的 URL
+            bucket_part = f"/{settings.MINIO_BUCKET_NAME}/"
+            if bucket_part in current_user.avatar_url:
+                old_object_name = current_user.avatar_url.split(bucket_part)[-1]
+                # 只有当新旧文件名不一致时才需要显式删除（MinIO会自动覆盖同名文件）
+                if old_object_name != object_name:
+                    try:
+                        minio_client.delete_file(old_object_name)
+                    except Exception as e:
+                        # 删除旧文件失败不应阻止新文件上传，记录日志即可
+                        print(f"Warning: Failed to delete old avatar {old_object_name}: {e}")
+
+        file_data = await file.read()
+        
+        # 4. 上传到 MinIO
+        url = minio_client.upload_file(
+            file_data, 
+            object_name, 
+            content_type=file.content_type
+        )
+        
+        # 5. 更新用户信息
+        current_user.avatar_url = url
+        db.commit()
+        db.refresh(current_user)
+        
+        return current_user
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Avatar upload failed: {str(e)}")
+
+@router.put("/me", response_model=User)
+def update_user_me(
+    user_update: UserUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    更新当前用户的信息（昵称、头像等）
+    """
+    if user_update.nickname is not None:
+        current_user.nickname = user_update.nickname
+    if user_update.avatar_url is not None:
+        current_user.avatar_url = user_update.avatar_url
+    
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.get("/me", response_model=User)
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    """
+    获取当前用户信息
+    """
+    return current_user
+
+@router.post("/login", response_model=Token)
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    微信小程序登录接口
+    1. 接收小程序端的 code
+    2. 调用微信 API 获取 openid 和 session_key
+    3. 如果用户不存在则创建，存在则更新
+    4. 颁发 JWT Token
+    """
+    
+    # 1. 向微信服务器换取 openid
+    wx_url = "https://api.weixin.qq.com/sns/jscode2session"
+    params = {
+        "appid": settings.WECHAT_APP_ID,
+        "secret": settings.WECHAT_APP_SECRET,
+        "js_code": request.code,
+        "grant_type": "authorization_code"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(wx_url, params=params)
+        wx_data = response.json()
+    
+    if "errcode" in wx_data and wx_data["errcode"] != 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"WeChat API Error: {wx_data.get('errmsg')}"
+        )
+    
+    openid = wx_data["openid"]
+    # session_key = wx_data["session_key"] # 如果需要解密敏感数据会用到
+    
+    # 2. 查找或创建用户
+    user = db.query(models.User).filter(models.User.id == openid).first()
+    is_new_user = False
+    
+    if not user:
+        is_new_user = True
+        user = models.User(id=openid)
+        if request.userInfo:
+            user.nickname = request.userInfo.nickName
+            user.avatar_url = request.userInfo.avatarUrl
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        # 这里的逻辑可优化：每次登录是否更新头像昵称？
+        # 目前简单处理：如果传了且不一致则更新
+        if request.userInfo:
+            if request.userInfo.nickName != user.nickname:
+                user.nickname = request.userInfo.nickName
+            if request.userInfo.avatarUrl != user.avatar_url:
+                user.avatar_url = request.userInfo.avatarUrl
+            db.commit()
+
+    # 3. 生成 JWT Token
+    access_token = create_access_token(data={"sub": user.id})
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "is_new_user": is_new_user
+    }
