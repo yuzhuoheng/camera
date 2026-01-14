@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str
     MINIO_BUCKET_NAME: str = "camera-server-photos"
     MINIO_SECURE: bool = False
+    MINIO_PUBLIC_HOST: Optional[str] = None
     
     # Security
     SECRET_KEY: str
