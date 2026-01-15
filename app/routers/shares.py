@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import get_db
 from app.models.models import Share, Album, Photo, User
 from app.schemas.share import ShareInfoResponse, AlbumSimpleResponse
@@ -14,7 +14,10 @@ def get_share_info(token: str, db: Session = Depends(get_db)):
     if not share:
         raise HTTPException(status_code=404, detail="Share link not found")
         
-    if share.expires_at and share.expires_at < datetime.utcnow():
+    # Fix: Compare timezone-aware datetime with timezone-aware datetime
+    now = datetime.now(timezone.utc)
+    
+    if share.expires_at and share.expires_at < now:
         raise HTTPException(status_code=404, detail="Share link expired")
         
     album = db.query(Album).filter(Album.id == share.album_id).first()
