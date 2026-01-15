@@ -7,6 +7,7 @@ class AlbumSimpleResponse(BaseModel):
     id: str
     name: str
     owner_nickname: Optional[str] = None
+    owner_avatar_url: Optional[str] = None
     cover_url: Optional[str] = None
     
     class Config:

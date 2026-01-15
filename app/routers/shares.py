@@ -32,11 +32,13 @@ def get_share_info(token: str, db: Session = Depends(get_db)):
         
     owner = db.query(User).filter(User.id == album.owner_id).first()
     owner_nickname = owner.nickname if owner else "Unknown"
+    owner_avatar_url = owner.avatar_url if owner else None
 
     album_info = AlbumSimpleResponse(
         id=album.id,
         name=album.name,
         owner_nickname=owner_nickname,
+        owner_avatar_url=owner_avatar_url,
         cover_url=cover_url
     )
     

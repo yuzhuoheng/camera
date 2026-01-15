@@ -195,6 +195,7 @@ Base URL: `/api/v1` (具体取决于后端配置 `API_V1_STR`)
         "id": "...",
         "name": "我的旅行",
         "owner_nickname": "张三", // 显示所有者昵称
+        "owner_avatar_url": "http://...", // 显示所有者头像
         "cover_url": "..."
       },
       "permission": "read_only" // 返回此共享链接的权限，以便前端控制上传入口
