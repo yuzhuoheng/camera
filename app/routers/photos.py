@@ -81,7 +81,34 @@ async def upload_photo(
             
         # 5. Handle Album Logic
         final_album_id = album_id
-        if not final_album_id:
+        if final_album_id:
+            # 验证相册权限
+            # 1. 尝试查找自己的相册
+            album = db.query(models.Album).filter(
+                models.Album.id == final_album_id,
+                models.Album.owner_id == current_user.id
+            ).first()
+            
+            # 2. 如果不是自己的相册，检查是否有上传权限的分享链接
+            if not album:
+                 # 这里有点 tricky，因为上传接口没有传 share_token，所以我们只能信任 album_id
+                 # 但为了安全，我们应该检查该 album_id 是否存在有效的、允许上传的分享链接
+                 # 只要存在 ANY 一个有效的、允许上传的分享链接，我们就允许上传
+                 # 这是一个宽松的策略，适用于 "只要相册开放了上传权限，任何人（或者知道链接的人）都能上传"
+                 
+                 current_time = datetime.utcnow()
+                 valid_share = db.query(models.Share).filter(
+                     models.Share.album_id == final_album_id,
+                     models.Share.permission == "upload", # 必须是上传权限
+                     (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
+                 ).first()
+                 
+                 if not valid_share:
+                     # 既不是自己的，也没有有效的上传分享
+                     # 为了防止回滚错误（因为之前已经 rollback 了），这里抛出特定异常
+                     # 但要注意上面的 rollback 逻辑
+                     raise HTTPException(status_code=403, detail="Permission denied: You cannot upload to this album")
+        else:
             # Find or create default album
             default_album = db.query(models.Album).filter(
                 models.Album.owner_id == current_user.id,

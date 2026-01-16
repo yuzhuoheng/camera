@@ -79,6 +79,80 @@ def get_albums(
     # 填充详情（封面和数量）
     return [get_album_details(album, db) for album in albums]
 
+@router.get("/shared", response_model=List[AlbumResponse])
+def get_shared_albums(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 获取我参与的（被分享的）相册列表
+    # 目前逻辑是：只要我知道这个相册的分享链接（前端本地存储），我就能访问
+    # 但是服务端并没有存储 "谁访问过哪个分享链接" 的状态
+    # 因此，这个接口暂时无法返回 "我参与的相册"，除非我们在 Share 表中记录 user_id (但分享通常是匿名的)
+    # 或者，我们这里只返回当前用户创建的、并且被分享出去的相册？不，用户想要的是 "别人分享给我的"
+    
+    # 由于目前的分享机制是基于 Token 的匿名分享（只要有链接就能访问），服务端无法知道 "这个用户拥有哪些分享链接"
+    # 解决方案：
+    # 1. 前端自行维护 "我访问过的分享链接列表"
+    # 2. 或者，我们需要引入 "加入相册" 的概念，建立 UserAlbum 关联表
+    
+    # 鉴于当前架构，我们无法直接查询 "我参与的相册"。
+    # 但如果是 "所有权" 模式，即用户希望看到自己有权限上传的相册（包括自己的 + 别人分享给自己且有上传权限的）
+    # 那么目前只能返回自己的相册。
+    
+    # 为了解决用户的痛点："无法选择被分享的相册"，前端应该将 "访问过的分享Token" 存储起来。
+    # 当进入上传页面时，前端应该同时请求 "我的相册列表" 和 "我保存的分享相册信息(通过Token换取AlbumInfo)"。
+    
+    # 不过，如果用户想要一个 "我参与的相册" 列表接口，我们可以做一个变通：
+    # 暂时只返回空列表，或者在未来扩展 "用户-相册" 关联表。
+    
+    # 等等，如果分享是针对特定用户的（未来扩展），或者用户点击了 "收藏/加入" 相册？
+    # 目前最简单的做法是：前端传一个 tokens 列表，后端批量返回相册信息。
+    pass
+    return []
+
+@router.post("/batch-info", response_model=List[AlbumResponse])
+def get_albums_by_tokens(
+    tokens: List[str],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 前端将本地存储的 share_tokens 发送过来，后端返回对应的相册信息
+    # 并且过滤掉已过期的
+    
+    result = []
+    current_time = datetime.utcnow()
+    
+    for token in tokens:
+        share = db.query(Share).filter(Share.token == token).first()
+        if not share:
+            continue
+            
+        if share.expires_at and share.expires_at < current_time:
+            continue
+            
+        album = db.query(Album).filter(Album.id == share.album_id).first()
+        if not album:
+            continue
+            
+        # 避免重复（如果同一个相册有多个分享链接）
+        if any(a.id == album.id for a in result):
+            continue
+            
+        # 也不要返回自己的相册（自己的相册已经通过 get_albums 获取了）
+        if album.owner_id == current_user.id:
+            continue
+            
+        album_detail = get_album_details(album, db)
+        # 可以在这里标记一下权限
+        # album_detail.permission = share.permission 
+        # 但 AlbumResponse 没有 permission 字段，暂不处理
+        
+        result.append(album_detail)
+        
+    return result
+
 @router.get("/{album_id}", response_model=AlbumResponse)
 def get_album(
     album_id: str,
