@@ -61,7 +61,7 @@ def check_dependencies():
     try:
         inspector = inspect(engine)
         existing_tables = inspector.get_table_names()
-        required_tables = ["users", "albums", "photos", "shares"]
+        required_tables = ["users", "albums", "photos", "shares", "user_quota_logs", "user_invites"]
         
         missing_tables = [t for t in required_tables if t not in existing_tables]
         

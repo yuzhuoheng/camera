@@ -142,7 +142,8 @@ def get_photos(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.Photo).options(joinedload(models.Photo.owner)).filter(models.Photo.owner_id == current_user.id)
+    # Optimization: Remove joinedload since we filter by current_user.id
+    query = db.query(models.Photo).filter(models.Photo.owner_id == current_user.id)
     
     if album_id:
         query = query.filter(models.Photo.album_id == album_id)
@@ -152,6 +153,10 @@ def get_photos(
         
     total = query.count()
     photos = query.offset((page - 1) * size).limit(size).all()
+    
+    # Optimization: Manually set owner to current_user to avoid N+1 query
+    for photo in photos:
+        photo.owner = current_user
     
     pages = math.ceil(total / size) if size > 0 else 0
         
@@ -169,13 +174,17 @@ def get_photo(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    photo = db.query(models.Photo).options(joinedload(models.Photo.owner)).filter(
+    # Optimization: Remove joinedload since we filter by current_user.id
+    photo = db.query(models.Photo).filter(
         models.Photo.id == photo_id,
         models.Photo.owner_id == current_user.id
     ).first()
     
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
+        
+    # Optimization: Manually set owner
+    photo.owner = current_user
         
     return photo
 
@@ -187,8 +196,19 @@ def get_user_photos(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # Optimization: Query user once instead of joining for every row
+    target_user = None
+    if user_id == current_user.id:
+        target_user = current_user
+    else:
+        target_user = db.query(models.User).filter(models.User.id == user_id).first()
+        if not target_user:
+             # If user not found, we return empty list or 404. Here we return empty list to be safe or 404?
+             # Let's return 404 as "User not found" makes sense
+             raise HTTPException(status_code=404, detail="User not found")
+
     # TODO: Add privacy check (e.g., if album is public) or admin check here
-    query = db.query(models.Photo).options(joinedload(models.Photo.owner)).filter(models.Photo.owner_id == user_id)
+    query = db.query(models.Photo).filter(models.Photo.owner_id == user_id)
     
     # Order by created_at desc
     query = query.order_by(models.Photo.created_at.desc())
@@ -196,6 +216,10 @@ def get_user_photos(
     total = query.count()
     photos = query.offset((page - 1) * size).limit(size).all()
     
+    # Optimization: Manually set owner
+    for photo in photos:
+        photo.owner = target_user
+
     pages = math.ceil(total / size) if size > 0 else 0
         
     return {

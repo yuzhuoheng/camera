@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, BigInteger, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -14,9 +14,43 @@ class User(Base):
     nickname = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Storage quota
+    storage_used = Column(BigInteger, default=0) # bytes
+    storage_limit = Column(BigInteger, default=524288000) # 500MB in bytes
 
     albums = relationship("Album", back_populates="owner")
     photos = relationship("Photo", back_populates="owner")
+    quota_logs = relationship("UserQuotaLog", back_populates="user")
+    invites_sent = relationship("UserInvite", foreign_keys="[UserInvite.inviter_id]", back_populates="inviter")
+    invites_received = relationship("UserInvite", foreign_keys="[UserInvite.invitee_id]", back_populates="invitee")
+
+class UserQuotaLog(Base):
+    __tablename__ = "user_quota_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), index=True)
+    change_amount = Column(BigInteger, nullable=False) # Positive or negative
+    current_limit = Column(BigInteger, nullable=False) # Snapshot after change
+    reason = Column(String, nullable=False) # initial_default, invite_reward, purchase
+    reference_id = Column(String, nullable=True) # invited_user_id, order_id
+    operator = Column(String, nullable=True) # system, admin_id
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="quota_logs")
+
+class UserInvite(Base):
+    __tablename__ = "user_invites"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    inviter_id = Column(String, ForeignKey("users.id"), index=True)
+    invitee_id = Column(String, ForeignKey("users.id"), unique=True, index=True)
+    status = Column(String, default="completed") # completed, fraud
+    reward_granted = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    inviter = relationship("User", foreign_keys=[inviter_id], back_populates="invites_sent")
+    invitee = relationship("User", foreign_keys=[invitee_id], back_populates="invites_received")
 
 class Album(Base):
     __tablename__ = "albums"
@@ -39,6 +73,7 @@ class Photo(Base):
     url = Column(String)
     thumbnail_url = Column(String, nullable=True)
     filename = Column(String)
+    size = Column(Integer, default=0) # bytes
     
     owner_id = Column(String, ForeignKey("users.id"))
     album_id = Column(String, ForeignKey("albums.id"), nullable=True)

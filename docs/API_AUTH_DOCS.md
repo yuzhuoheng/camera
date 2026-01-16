@@ -20,6 +20,7 @@
 | :--- | :--- | :--- | :--- |
 | `code` | string | 是 | 微信小程序 `wx.login` 获取的临时登录凭证 |
 | `userInfo` | object | 否 | 微信用户信息（用于首次注册时自动设置头像昵称） |
+| `invite_code` | string | 否 | 邀请码（邀请人的 User ID），仅新用户注册时生效 |
 
 **userInfo 结构**:
 | 字段 | 类型 | 说明 |
@@ -75,6 +76,8 @@
   "id": "oAbc123...",
   "nickname": "微信用户",
   "avatar_url": "https://thirdwx.qlogo.cn/...",
+  "storage_used": 0,
+  "storage_limit": 524288000,
   "created_at": "2023-10-27T10:00:00.123456"
 }
 ```
@@ -105,6 +108,8 @@
   "id": "oAbc123...",
   "nickname": "用户昵称",
   "avatar_url": "http://192.168.x.x:9000/camera-server-photos/users/oAbc123.../avatar.jpg",
+  "storage_used": 0,
+  "storage_limit": 524288000,
   "created_at": "2023-10-27T10:00:00.123456"
 }
 ```
@@ -137,6 +142,8 @@
   "id": "oAbc123...",
   "nickname": "新昵称",
   "avatar_url": "https://new-avatar-url.com/...",
+  "storage_used": 0,
+  "storage_limit": 524288000,
   "created_at": "2023-10-27T10:00:00.123456"
 }
 ```

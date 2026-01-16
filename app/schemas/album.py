@@ -16,6 +16,8 @@ class AlbumResponse(AlbumBase):
     owner_id: str
     cover_url: Optional[str] = None
     photo_count: int = 0
+    size: int = 0 # bytes
+    is_default: int = 0
     created_at: datetime
 
     class Config:

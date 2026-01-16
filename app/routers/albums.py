@@ -13,8 +13,16 @@ from datetime import datetime, timedelta
 router = APIRouter()
 
 def get_album_details(album: Album, db: Session) -> AlbumResponse:
-    # 统计照片数量
-    photo_count = db.query(Photo).filter(Photo.album_id == album.id).count()
+    # 统计照片数量和总大小
+    # 使用 func.sum 聚合查询
+    from sqlalchemy.sql import func
+    stats = db.query(
+        func.count(Photo.id),
+        func.sum(Photo.size)
+    ).filter(Photo.album_id == album.id).first()
+    
+    photo_count = stats[0] or 0
+    total_size = stats[1] or 0
     
     # 获取最新一张照片作为封面
     latest_photo = db.query(Photo).filter(Photo.album_id == album.id).order_by(desc(Photo.created_at)).first()
@@ -30,7 +38,9 @@ def get_album_details(album: Album, db: Session) -> AlbumResponse:
         owner_id=album.owner_id,
         created_at=album.created_at,
         cover_url=cover_url,
-        photo_count=photo_count
+        photo_count=photo_count,
+        size=int(total_size),
+        is_default=album.is_default or 0
     )
 
 @router.post("/", response_model=AlbumResponse, status_code=status.HTTP_201_CREATED)
@@ -60,6 +70,9 @@ def get_albums(
     
     if keyword:
         query = query.filter(Album.name.contains(keyword))
+    
+    # 按照创建时间倒序排列
+    query = query.order_by(desc(Album.created_at))
     
     albums = query.offset(skip).limit(limit).all()
     

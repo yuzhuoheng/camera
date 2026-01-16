@@ -13,3 +13,4 @@ class WxUserInfo(BaseModel):
 class LoginRequest(BaseModel):
     code: str
     userInfo: Optional[WxUserInfo] = None
+    invite_code: Optional[str] = None # Optional invite code (user_id of inviter)

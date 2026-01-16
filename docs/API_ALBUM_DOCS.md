@@ -15,6 +15,7 @@ Base URL: `/api/v1` (具体取决于后端配置 `API_V1_STR`)
 | owner_id | string | 所属用户 ID (OpenID) |
 | created_at | datetime | 创建时间 |
 | photo_count | integer | 照片数量 (统计字段，非数据库原生字段) |
+| size | integer | 占用空间大小 (单位: bytes) |
 | is_default | integer | 是否为系统默认相册 (1=是, 0=否) |
 
 ### Share (共享)
@@ -128,6 +129,7 @@ Base URL: `/api/v1` (具体取决于后端配置 `API_V1_STR`)
       "cover_url": "http://example.com/latest_photo_thumb.jpg",
       "owner_id": "user_openid_123",
       "photo_count": 12,
+      "size": 10485760,
       "created_at": "2024-01-14T10:00:00Z"
     }
     ```

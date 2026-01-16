@@ -96,6 +96,9 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
     """
     return current_user
 
+from datetime import datetime
+from sqlalchemy import func
+
 @router.post("/login", response_model=Token)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
@@ -104,6 +107,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     2. 调用微信 API 获取 openid 和 session_key
     3. 如果用户不存在则创建，存在则更新
     4. 颁发 JWT Token
+    5. 处理邀请奖励逻辑
     """
     
     # 1. 向微信服务器换取 openid
@@ -139,6 +143,86 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             user.nickname = request.userInfo.nickName
             user.avatar_url = request.userInfo.avatarUrl
         db.add(user)
+        
+        # Record initial quota log
+        initial_limit = 524288000 # 500MB
+        quota_log = models.UserQuotaLog(
+            user_id=openid,
+            change_amount=initial_limit,
+            current_limit=initial_limit,
+            reason="initial_default",
+            operator="system"
+        )
+        db.add(quota_log)
+        
+        # --- Invite Logic Start ---
+        if request.invite_code and request.invite_code != openid:
+            # Check if inviter exists
+            inviter = db.query(models.User).filter(models.User.id == request.invite_code).first()
+            if inviter:
+                # Create invite record
+                invite_record = models.UserInvite(
+                    inviter_id=inviter.id,
+                    invitee_id=openid,
+                    status="completed",
+                    reward_granted=False
+                )
+                db.add(invite_record)
+                db.flush() # Get ID
+
+                # 1. Reward Invitee (+100MB)
+                reward_amount = 104857600 # 100MB
+                user.storage_limit += reward_amount
+                
+                invitee_log = models.UserQuotaLog(
+                    user_id=openid,
+                    change_amount=reward_amount,
+                    current_limit=user.storage_limit,
+                    reason="invite_reward_invitee",
+                    reference_id=invite_record.id,
+                    operator="system"
+                )
+                db.add(invitee_log)
+
+                # 2. Reward Inviter (+100MB, with limits)
+                # Check daily limit (1GB) and total limit (5GB) for inviter from invites
+                # Total gained from invites
+                total_invite_reward = db.query(func.sum(models.UserQuotaLog.change_amount)).filter(
+                    models.UserQuotaLog.user_id == inviter.id,
+                    models.UserQuotaLog.reason == "invite_reward_inviter"
+                ).scalar() or 0
+                
+                # Today gained from invites
+                today_invite_reward = db.query(func.sum(models.UserQuotaLog.change_amount)).filter(
+                    models.UserQuotaLog.user_id == inviter.id,
+                    models.UserQuotaLog.reason == "invite_reward_inviter",
+                    func.date(models.UserQuotaLog.created_at) == datetime.utcnow().date()
+                ).scalar() or 0
+
+                daily_limit = 1073741824 # 1GB
+                total_limit = 5368709120 # 5GB
+                
+                # Calculate actual reward allowed
+                remaining_daily = max(0, daily_limit - today_invite_reward)
+                remaining_total = max(0, total_limit - total_invite_reward)
+                
+                actual_reward = min(reward_amount, remaining_daily, remaining_total)
+                
+                if actual_reward > 0:
+                    inviter.storage_limit += actual_reward
+                    inviter_log = models.UserQuotaLog(
+                        user_id=inviter.id,
+                        change_amount=actual_reward,
+                        current_limit=inviter.storage_limit,
+                        reason="invite_reward_inviter",
+                        reference_id=invite_record.id,
+                        operator="system"
+                    )
+                    db.add(inviter_log)
+                    invite_record.reward_granted = True
+
+        # --- Invite Logic End ---
+        
         db.commit()
         db.refresh(user)
     else:
