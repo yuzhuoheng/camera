@@ -223,6 +223,14 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 
         # --- Invite Logic End ---
         
+        # Create Default Album
+        default_album = models.Album(
+            name="默认相册",
+            owner_id=user.id,
+            is_default=1
+        )
+        db.add(default_album)
+        
         db.commit()
         db.refresh(user)
     else:
