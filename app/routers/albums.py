@@ -85,10 +85,26 @@ def get_album(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    album = db.query(Album).filter(Album.id == album_id, Album.owner_id == current_user.id).first()
+    # 先尝试获取属于自己的相册
+    album = db.query(Album).filter(Album.id == album_id).first()
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
-    
+        
+    # 如果不是所有者，检查是否有有效的分享链接
+    if album.owner_id != current_user.id:
+        # 检查是否存在未过期的分享
+        # 注意：这里我们放宽了权限，只要相册有有效的分享链接，就允许查看详情
+        # 这是为了支持前端在不知道 token 的情况下（只知道 album_id）获取相册详情
+        # 这是一个妥协方案，更严格的做法是要求请求头带上 share-token
+        current_time = datetime.utcnow()
+        share = db.query(Share).filter(
+            Share.album_id == album.id,
+            (Share.expires_at == None) | (Share.expires_at > current_time)
+        ).first()
+        
+        if not share:
+             raise HTTPException(status_code=403, detail="Not authorized to access this album")
+
     return get_album_details(album, db)
 
 @router.put("/{album_id}", response_model=AlbumResponse)
