@@ -57,15 +57,16 @@ def reset_minio():
     if client.bucket_exists(bucket_name):
         logger.info(f"正在清空 Bucket: {bucket_name}")
         # 获取所有对象
+        # 注意：Minio 的 remove_objects 需要的是 DeleteObject 列表或简单的对象名迭代器
+        # list_objects 返回的是 Object 类实例，直接传给 remove_objects 在某些版本可能报错
+        # 稳妥做法是手动提取名称并逐个删除（虽然慢点但兼容性好）或者构造 DeleteObject
         objects = client.list_objects(bucket_name, recursive=True)
         
-        # 批量删除
-        delete_errors = list(client.remove_objects(bucket_name, objects))
-        for error in delete_errors:
-            logger.error(f"删除对象失败: {error}")
+        for obj in objects:
+            client.remove_object(bucket_name, obj.object_name)
+            logger.info(f"已删除对象: {obj.object_name}")
             
-        if not delete_errors:
-            logger.info("Bucket 已清空。")
+        logger.info("Bucket 已清空。")
     else:
         logger.info(f"Bucket {bucket_name} 不存在，无需清理。")
 
