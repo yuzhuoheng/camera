@@ -70,6 +70,39 @@ def check_dependencies():
         else:
             logger.info(f"✅ Database tables verified: {', '.join(existing_tables)}")
             
+            # 2.1 Check Columns for existing tables
+            # This is a simple migration-like check to add missing columns
+            try:
+                for table_name in required_tables:
+                    if table_name not in existing_tables:
+                        continue
+                        
+                    inspector_columns = inspector.get_columns(table_name)
+                    existing_column_names = [c["name"] for c in inspector_columns]
+                    
+                    # Define expected columns for each table (simplified, only critical new columns)
+                    expected_new_columns = []
+                    if table_name == "users":
+                        expected_new_columns = [
+                            {"name": "storage_used", "type": "BIGINT DEFAULT 0"},
+                            {"name": "storage_limit", "type": "BIGINT DEFAULT 524288000"}
+                        ]
+                    # Add other tables if needed
+                    
+                    if expected_new_columns:
+                        with engine.connect() as conn:
+                            for col in expected_new_columns:
+                                if col["name"] not in existing_column_names:
+                                    logger.warning(f"⚠️  Missing column '{col['name']}' in table '{table_name}'. Adding it...")
+                                    try:
+                                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col['name']} {col['type']}"))
+                                        conn.commit()
+                                        logger.info(f"✅ Column '{col['name']}' added to '{table_name}'.")
+                                    except Exception as e:
+                                        logger.error(f"❌ Failed to add column '{col['name']}' to '{table_name}': {e}")
+            except Exception as e:
+                logger.error(f"❌ Failed to check/update table columns: {e}")
+            
     except Exception as e:
         logger.error(f"❌ Failed to check database tables: {e}")
         # We don't raise here to allow create_all to try fixing it
