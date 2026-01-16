@@ -12,13 +12,15 @@ router = APIRouter()
 def get_share_info(token: str, db: Session = Depends(get_db)):
     share = db.query(Share).filter(Share.token == token).first()
     if not share:
-        raise HTTPException(status_code=404, detail="Share link not found")
+        # 区分撤回（找不到记录）
+        raise HTTPException(status_code=404, detail="Share link revoked or not found")
         
     # Fix: Compare timezone-aware datetime with timezone-aware datetime
     now = datetime.now(timezone.utc)
     
     if share.expires_at and share.expires_at < now:
-        raise HTTPException(status_code=404, detail="Share link expired")
+        # 区分过期
+        raise HTTPException(status_code=410, detail="Share link expired")
         
     album = db.query(Album).filter(Album.id == share.album_id).first()
     if not album:
