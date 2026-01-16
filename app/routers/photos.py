@@ -37,11 +37,59 @@ async def upload_photo(
     file_size = file.file.tell()
     file.file.seek(0)
     
-    # 2. Check Quota & Atomic Update
+    # 2. Determine Album and Billable User (Album Owner)
+    final_album_id = album_id
+    billable_user_id = current_user.id
+    
+    if final_album_id:
+        # 验证相册权限
+        # 1. 尝试查找相册
+        album = db.query(models.Album).filter(models.Album.id == final_album_id).first()
+        
+        if not album:
+             # 如果指定了 ID 但找不到，抛出错误（或者回退到默认相册？这里选择抛错更严谨）
+             raise HTTPException(status_code=404, detail="Album not found")
+
+        # 2. 确定计费用户（相册拥有者）
+        billable_user_id = album.owner_id
+        
+        # 3. 权限检查
+        if album.owner_id != current_user.id:
+             # 检查是否有上传权限的分享链接
+             current_time = datetime.utcnow()
+             valid_share = db.query(models.Share).filter(
+                 models.Share.album_id == final_album_id,
+                 models.Share.permission == "upload", # 必须是上传权限
+                 (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
+             ).first()
+             
+             if not valid_share:
+                 raise HTTPException(status_code=403, detail="Permission denied: You cannot upload to this album")
+    else:
+        # Find or create default album for current_user
+        default_album = db.query(models.Album).filter(
+            models.Album.owner_id == current_user.id,
+            models.Album.is_default == 1
+        ).first()
+        
+        if not default_album:
+            default_album = models.Album(
+                name="默认相册",
+                owner_id=current_user.id,
+                is_default=1
+            )
+            db.add(default_album)
+            db.commit()
+            db.refresh(default_album)
+        
+        final_album_id = default_album.id
+        billable_user_id = current_user.id
+
+    # 3. Check Quota & Atomic Update for Billable User
     # Use atomic update to prevent race conditions
     stmt = (
         update(models.User)
-        .where(models.User.id == current_user.id)
+        .where(models.User.id == billable_user_id)
         .where(models.User.storage_used + file_size <= models.User.storage_limit)
         .values(storage_used=models.User.storage_used + file_size)
     )
@@ -49,23 +97,24 @@ async def upload_photo(
     db.commit()
     
     if result.rowcount == 0:
-        raise HTTPException(status_code=403, detail="Storage limit exceeded")
+        raise HTTPException(status_code=403, detail="Storage limit exceeded for the album owner")
 
     photo_id = str(uuid.uuid4())
+    # ... (rest of the upload logic)
     object_name = f"photos/{current_user.id}/{photo_id}{ext}"
     thumb_object_name = f"photos/{current_user.id}/{photo_id}_thumb.jpg"
     
     try:
         file_data = await file.read()
         
-        # 3. Upload Original
+        # 4. Upload Original
         url = minio_client.upload_file(
             file_data, 
             object_name, 
             content_type=file.content_type
         )
         
-        # 4. Create and Upload Thumbnail
+        # 5. Create and Upload Thumbnail
         thumbnail_url = None
         try:
             thumb_data = create_thumbnail(file_data)
@@ -79,66 +128,23 @@ async def upload_photo(
             # Fallback: use original URL as thumbnail if generation fails
             thumbnail_url = url
             
-        # 5. Handle Album Logic
-        final_album_id = album_id
-        if final_album_id:
-            # 验证相册权限
-            # 1. 尝试查找自己的相册
-            album = db.query(models.Album).filter(
-                models.Album.id == final_album_id,
-                models.Album.owner_id == current_user.id
-            ).first()
-            
-            # 2. 如果不是自己的相册，检查是否有上传权限的分享链接
-            if not album:
-                 # 这里有点 tricky，因为上传接口没有传 share_token，所以我们只能信任 album_id
-                 # 但为了安全，我们应该检查该 album_id 是否存在有效的、允许上传的分享链接
-                 # 只要存在 ANY 一个有效的、允许上传的分享链接，我们就允许上传
-                 # 这是一个宽松的策略，适用于 "只要相册开放了上传权限，任何人（或者知道链接的人）都能上传"
-                 
-                 current_time = datetime.utcnow()
-                 valid_share = db.query(models.Share).filter(
-                     models.Share.album_id == final_album_id,
-                     models.Share.permission == "upload", # 必须是上传权限
-                     (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
-                 ).first()
-                 
-                 if not valid_share:
-                     # 既不是自己的，也没有有效的上传分享
-                     # 为了防止回滚错误（因为之前已经 rollback 了），这里抛出特定异常
-                     # 但要注意上面的 rollback 逻辑
-                     raise HTTPException(status_code=403, detail="Permission denied: You cannot upload to this album")
-        else:
-            # Find or create default album
-            default_album = db.query(models.Album).filter(
-                models.Album.owner_id == current_user.id,
-                models.Album.is_default == 1
-            ).first()
-            
-            if not default_album:
-                default_album = models.Album(
-                    name="默认相册",
-                    owner_id=current_user.id,
-                    is_default=1
-                )
-                db.add(default_album)
-                db.commit()
-                db.refresh(default_album)
-            
-            final_album_id = default_album.id
-            
         # 6. Save to DB
+        # Note: We've already handled Album Logic in step 2
+        
         photo = models.Photo(
             id=photo_id,
             url=url,
             thumbnail_url=thumbnail_url,
             filename=file.filename,
             size=file_size,
-            owner_id=current_user.id,
+            owner_id=billable_user_id, # Owner is the billable user (Album Owner)
             album_id=final_album_id
         )
-        # Explicitly set owner to current_user to avoid extra query and ensure it's available for response_model
-        photo.owner = current_user
+        # Explicitly set owner to avoid extra query
+        # Note: if billable_user_id != current_user.id, we might want to fetch the user object
+        # or just leave it blank to be lazy loaded.
+        if billable_user_id == current_user.id:
+            photo.owner = current_user
         
         db.add(photo)
         db.commit()
@@ -153,7 +159,7 @@ async def upload_photo(
         if "Storage limit exceeded" not in str(e):
              rollback_stmt = (
                 update(models.User)
-                .where(models.User.id == current_user.id)
+                .where(models.User.id == billable_user_id) # Rollback billable user
                 .values(storage_used=models.User.storage_used - file_size)
             )
              db.execute(rollback_stmt)
