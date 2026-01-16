@@ -87,6 +87,10 @@ def check_dependencies():
                             {"name": "storage_used", "type": "BIGINT DEFAULT 0"},
                             {"name": "storage_limit", "type": "BIGINT DEFAULT 524288000"}
                         ]
+                    elif table_name == "photos":
+                        expected_new_columns = [
+                            {"name": "size", "type": "INTEGER DEFAULT 0"}
+                        ]
                     # Add other tables if needed
                     
                     if expected_new_columns:
