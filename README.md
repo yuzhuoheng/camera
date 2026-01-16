@@ -85,6 +85,26 @@ docker build -t camera-server .
 docker run -d --name camera-server --network host -p 8000:8000 --env-file .env  camera-server
 ```
 
+### 6. 数据重置
+
+如果你需要清空所有数据（数据库和 MinIO 文件），可以使用 `reset_all.py` 脚本。
+
+**警告：此操作不可恢复，请谨慎使用！**
+
+在服务器容器内运行：
+
+```bash
+docker exec -it camera-server python reset_all.py
+```
+
+或者在本地环境运行：
+
+```bash
+python reset_all.py
+```
+
+执行后建议重启服务以重新初始化数据库表结构。
+
 ## 目录结构
 
 ```

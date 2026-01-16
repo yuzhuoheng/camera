@@ -109,6 +109,11 @@ def update_album(
     db.refresh(album)
     return get_album_details(album, db)
 
+from app.services.storage import minio_client
+from app.core.config import get_settings
+
+settings = get_settings()
+
 @router.delete("/{album_id}", status_code=status.HTTP_200_OK)
 def delete_album(
     album_id: str,
@@ -122,15 +127,32 @@ def delete_album(
     if album.is_default:
         raise HTTPException(status_code=400, detail="Default album cannot be deleted")
     
-    # 策略：将该相册内的照片 album_id 置为 None (未分类)
+    # 策略升级：级联删除照片（数据库记录 + 云存储文件）
     photos = db.query(Photo).filter(Photo.album_id == album_id).all()
+    bucket_part = f"/{settings.MINIO_BUCKET_NAME}/"
+
     for photo in photos:
-        photo.album_id = None
+        # 1. Delete from MinIO
+        try:
+            if photo.url and bucket_part in photo.url:
+                obj_name = photo.url.split(bucket_part)[-1]
+                minio_client.delete_file(obj_name)
+                
+            if photo.thumbnail_url and bucket_part in photo.thumbnail_url:
+                if photo.thumbnail_url != photo.url:
+                    obj_name = photo.thumbnail_url.split(bucket_part)[-1]
+                    minio_client.delete_file(obj_name)
+        except Exception as e:
+            print(f"Error deleting files for photo {photo.id}: {e}")
+        
+        # 2. Delete from DB
+        db.delete(photo)
     
+    # 3. Delete Album
     db.delete(album)
     db.commit()
     
-    return {"message": "Album deleted successfully", "id": album_id}
+    return {"message": "Album and all its photos deleted successfully", "id": album_id}
 
 @router.post("/{album_id}/share", response_model=ShareResponse)
 def create_share(
