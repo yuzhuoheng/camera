@@ -34,6 +34,7 @@
   "thumbnail_url": "http://minio-host/bucket/photos/user_id/photo_thumb.jpg",
   "download_url": "http://minio-host/bucket/photos/user_id/photo.jpg", 
   "filename": "my_photo.jpg",
+  "size": 102400,
   "album_id": "aXyz789...",
   "owner_id": "uUser123...",
   "created_at": "2023-10-27T10:05:00.123456"
@@ -70,6 +71,7 @@
       "thumbnail_url": "http://...",
       "download_url": "http://...",
       "filename": "photo1.jpg",
+      "size": 102400,
       "album_id": "aXyz789...",
       "owner_id": "uUser123...",
       "created_at": "2023-10-27T10:05:00.123456"
@@ -80,6 +82,7 @@
       "thumbnail_url": "http://...",
       "download_url": "http://...",
       "filename": "photo2.jpg",
+      "size": 204800,
       "album_id": null,
       "owner_id": "uUser123...",
       "created_at": "2023-10-27T11:00:00.000000"
@@ -117,8 +120,14 @@
   "thumbnail_url": "http://...",
   "download_url": "http://...",
   "filename": "photo1.jpg",
+  "size": 102400,
   "album_id": "aXyz789...",
   "owner_id": "uUser123...",
+  "owner": {
+    "id": "uUser123...",
+    "nickname": "用户昵称",
+    "avatar_url": "http://..."
+  },
   "created_at": "2023-10-27T10:05:00.123456"
 }
 ```

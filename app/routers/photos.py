@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import update
 from typing import Optional, List
 import uuid
 import os
@@ -31,6 +32,25 @@ async def upload_photo(
     if not ext:
         ext = ".jpg"
     
+    # Calculate file size
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    
+    # 2. Check Quota & Atomic Update
+    # Use atomic update to prevent race conditions
+    stmt = (
+        update(models.User)
+        .where(models.User.id == current_user.id)
+        .where(models.User.storage_used + file_size <= models.User.storage_limit)
+        .values(storage_used=models.User.storage_used + file_size)
+    )
+    result = db.execute(stmt)
+    db.commit()
+    
+    if result.rowcount == 0:
+        raise HTTPException(status_code=403, detail="Storage limit exceeded")
+
     photo_id = str(uuid.uuid4())
     object_name = f"photos/{current_user.id}/{photo_id}{ext}"
     thumb_object_name = f"photos/{current_user.id}/{photo_id}_thumb.jpg"
@@ -38,14 +58,14 @@ async def upload_photo(
     try:
         file_data = await file.read()
         
-        # 2. Upload Original
+        # 3. Upload Original
         url = minio_client.upload_file(
             file_data, 
             object_name, 
             content_type=file.content_type
         )
         
-        # 3. Create and Upload Thumbnail
+        # 4. Create and Upload Thumbnail
         thumbnail_url = None
         try:
             thumb_data = create_thumbnail(file_data)
@@ -59,7 +79,7 @@ async def upload_photo(
             # Fallback: use original URL as thumbnail if generation fails
             thumbnail_url = url
             
-        # 4. Handle Album Logic
+        # 5. Handle Album Logic
         final_album_id = album_id
         if not final_album_id:
             # Find or create default album
@@ -80,15 +100,19 @@ async def upload_photo(
             
             final_album_id = default_album.id
             
-        # 5. Save to DB
+        # 6. Save to DB
         photo = models.Photo(
             id=photo_id,
             url=url,
             thumbnail_url=thumbnail_url,
             filename=file.filename,
+            size=file_size,
             owner_id=current_user.id,
             album_id=final_album_id
         )
+        # Explicitly set owner to current_user to avoid extra query and ensure it's available for response_model
+        photo.owner = current_user
+        
         db.add(photo)
         db.commit()
         db.refresh(photo)
@@ -96,6 +120,18 @@ async def upload_photo(
         return photo
 
     except Exception as e:
+        # Rollback storage usage if anything fails
+        print(f"Upload failed, rolling back storage usage: {e}")
+        # Only rollback if we haven't already raised the 403
+        if "Storage limit exceeded" not in str(e):
+             rollback_stmt = (
+                update(models.User)
+                .where(models.User.id == current_user.id)
+                .values(storage_used=models.User.storage_used - file_size)
+            )
+             db.execute(rollback_stmt)
+             db.commit()
+        
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.get("", response_model=PhotoListResponse)
@@ -106,7 +142,7 @@ def get_photos(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.Photo).filter(models.Photo.owner_id == current_user.id)
+    query = db.query(models.Photo).options(joinedload(models.Photo.owner)).filter(models.Photo.owner_id == current_user.id)
     
     if album_id:
         query = query.filter(models.Photo.album_id == album_id)
@@ -133,7 +169,7 @@ def get_photo(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    photo = db.query(models.Photo).filter(
+    photo = db.query(models.Photo).options(joinedload(models.Photo.owner)).filter(
         models.Photo.id == photo_id,
         models.Photo.owner_id == current_user.id
     ).first()
@@ -152,7 +188,7 @@ def get_user_photos(
     db: Session = Depends(get_db)
 ):
     # TODO: Add privacy check (e.g., if album is public) or admin check here
-    query = db.query(models.Photo).filter(models.Photo.owner_id == user_id)
+    query = db.query(models.Photo).options(joinedload(models.Photo.owner)).filter(models.Photo.owner_id == user_id)
     
     # Order by created_at desc
     query = query.order_by(models.Photo.created_at.desc())
@@ -184,6 +220,8 @@ def delete_photo(
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
     
+    photo_size = photo.size if photo.size else 0
+
     # Delete from MinIO
     try:
         bucket_part = f"/{settings.MINIO_BUCKET_NAME}/"
@@ -202,5 +240,15 @@ def delete_photo(
         print(f"Error deleting files from MinIO: {e}")
         
     db.delete(photo)
+    
+    # Decrement storage usage
+    if photo_size > 0:
+        stmt = (
+            update(models.User)
+            .where(models.User.id == current_user.id)
+            .values(storage_used=models.User.storage_used - photo_size)
+        )
+        db.execute(stmt)
+        
     db.commit()
     return
