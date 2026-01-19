@@ -103,6 +103,8 @@ Base URL: `/api/v1` (具体取决于后端配置 `API_V1_STR`)
     - `skip`: integer (默认 0)
     - `limit`: integer (默认 100)
     - `keyword`: string (可选，用于按名称搜索)
+    - `start_date`: string (可选，筛选创建时间晚于此日期，ISO格式)
+    - `end_date`: string (可选，筛选创建时间早于此日期，ISO格式)
 - **Response**: `200 OK`
     ```json
     [

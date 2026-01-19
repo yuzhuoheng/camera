@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import update
 from typing import Optional, List
@@ -182,11 +182,19 @@ def get_photos(
     page: int = 1,
     size: int = 20,
     album_id: Optional[str] = None,
-    share_token: Optional[str] = None, # 新增 share_token 参数
+    share_token: Optional[str] = None,
+    start_date: Optional[datetime] = Query(None, description="Filter photos created after this date (ISO format)"),
+    end_date: Optional[datetime] = Query(None, description="Filter photos created before this date (ISO format)"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Photo)
+    
+    if start_date:
+        query = query.filter(models.Photo.created_at >= start_date)
+        
+    if end_date:
+        query = query.filter(models.Photo.created_at <= end_date)
     
     if album_id:
         # 场景1：查看特定相册

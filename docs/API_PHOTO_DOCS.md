@@ -60,6 +60,8 @@
 | `size` | int | 否 | 每页数量 (默认 20) |
 | `album_id` | string | 否 | 按相册 ID 筛选 |
 | `share_token` | string | 否 | 分享 Token。如果查看他人分享的相册，此字段必填。 |
+| `start_date` | string | 否 | 筛选创建时间晚于此日期 (ISO格式) |
+| `end_date` | string | 否 | 筛选创建时间早于此日期 (ISO格式) |
 
 ### 响应结果 (Response)
 

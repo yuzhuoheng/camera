@@ -63,6 +63,8 @@ def get_albums(
     skip: int = 0,
     limit: int = 100,
     keyword: Optional[str] = None,
+    start_date: Optional[datetime] = Query(None, description="Filter albums created after this date (ISO format)"),
+    end_date: Optional[datetime] = Query(None, description="Filter albums created before this date (ISO format)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -70,6 +72,12 @@ def get_albums(
     
     if keyword:
         query = query.filter(Album.name.contains(keyword))
+    
+    if start_date:
+        query = query.filter(Album.created_at >= start_date)
+        
+    if end_date:
+        query = query.filter(Album.created_at <= end_date)
     
     # 按照创建时间倒序排列
     query = query.order_by(desc(Album.created_at))
