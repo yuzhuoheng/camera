@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import update
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import os
 import math
@@ -22,6 +22,7 @@ settings = get_settings()
 async def upload_photo(
     file: UploadFile = File(...),
     album_id: Optional[str] = Form(None),
+    share_token: Optional[str] = Form(None), # 新增 share_token 参数
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -57,15 +58,23 @@ async def upload_photo(
         # 3. 权限检查
         if album.owner_id != current_user.id:
              # 检查是否有上传权限的分享链接
-             current_time = datetime.utcnow()
-             valid_share = db.query(models.Share).filter(
-                 models.Share.album_id == final_album_id,
-                 models.Share.permission == "upload", # 必须是上传权限
-                 (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
-             ).first()
+             current_time = datetime.now(timezone.utc)
              
-             if not valid_share:
-                 raise HTTPException(status_code=403, detail="Permission denied: You cannot upload to this album")
+             # 优先使用前端传递的 share_token 进行验证
+             if share_token:
+                 valid_share = db.query(models.Share).filter(
+                     models.Share.token == share_token,
+                     models.Share.album_id == final_album_id,
+                     models.Share.permission == "upload", # 必须是上传权限
+                     (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
+                 ).first()
+                 
+                 if not valid_share:
+                     raise HTTPException(status_code=403, detail="Invalid or expired share token for upload")
+             else:
+                 # 如果没有传 token，尝试在数据库中查找是否存在有效的 token (兼容旧逻辑，但不太严谨，建议前端必须传 token)
+                 # 为了安全性，最好要求必须传 token。这里我们先保持严格：非 owner 必须传 token。
+                 raise HTTPException(status_code=403, detail="Permission denied: You need a valid share token to upload to this album")
     else:
         # Find or create default album for current_user
         default_album = db.query(models.Album).filter(
@@ -101,9 +110,10 @@ async def upload_photo(
         raise HTTPException(status_code=403, detail="Storage limit exceeded for the album owner")
 
     photo_id = str(uuid.uuid4())
-    # ... (rest of the upload logic)
-    object_name = f"photos/{current_user.id}/{photo_id}{ext}"
-    thumb_object_name = f"photos/{current_user.id}/{photo_id}_thumb.jpg"
+    object_name = f"photos/{billable_user_id}/{photo_id}{ext}" # Use billable_user_id for storage path? Or current_user? 
+    # Usually files are stored under owner's path. So use billable_user_id (album owner).
+    
+    thumb_object_name = f"photos/{billable_user_id}/{photo_id}_thumb.jpg"
     
     try:
         file_data = await file.read()
@@ -130,22 +140,18 @@ async def upload_photo(
             thumbnail_url = url
             
         # 6. Save to DB
-        # Note: We've already handled Album Logic in step 2
-        
         photo = models.Photo(
             id=photo_id,
             url=url,
             thumbnail_url=thumbnail_url,
             filename=file.filename,
             size=file_size,
-            owner_id=billable_user_id, # Owner is the billable user (Album Owner)
+            owner_id=current_user.id, # The uploader is the owner of the photo record
             album_id=final_album_id
         )
+        
         # Explicitly set owner to avoid extra query
-        # Note: if billable_user_id != current_user.id, we might want to fetch the user object
-        # or just leave it blank to be lazy loaded.
-        if billable_user_id == current_user.id:
-            photo.owner = current_user
+        photo.owner = current_user
         
         db.add(photo)
         db.commit()
@@ -185,7 +191,7 @@ def get_photos(
         # 优先检查 share_token
         if share_token:
             # 校验 Share Token
-            current_time = datetime.utcnow()
+            current_time = datetime.now(timezone.utc)
             valid_share = db.query(models.Share).filter(
                 models.Share.token == share_token,
                 models.Share.album_id == album_id, # Token 必须匹配请求的 album_id
@@ -227,6 +233,7 @@ def get_photos(
     query = query.order_by(models.Photo.created_at.desc())
     
     if album_id and share_token:
+        # 如果是分享相册，可能包含多人的照片，需要加载 owner 信息
         query = query.options(joinedload(models.Photo.owner))
         
     total = query.count()
@@ -317,11 +324,25 @@ def delete_photo(
 ):
     photo = db.query(models.Photo).filter(
         models.Photo.id == photo_id,
-        models.Photo.owner_id == current_user.id
+        # models.Photo.owner_id == current_user.id # REMOVE THIS: Allow album owner to delete photos too
     ).first()
     
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
+
+    # Permission Check:
+    # 1. Photo Owner can delete
+    # 2. Album Owner can delete (if photo is in an album)
+    can_delete = False
+    if photo.owner_id == current_user.id:
+        can_delete = True
+    elif photo.album_id:
+        album = db.query(models.Album).filter(models.Album.id == photo.album_id).first()
+        if album and album.owner_id == current_user.id:
+            can_delete = True
+            
+    if not can_delete:
+        raise HTTPException(status_code=403, detail="Permission denied: You cannot delete this photo")
     
     photo_size = photo.size if photo.size else 0
 
@@ -344,11 +365,17 @@ def delete_photo(
         
     db.delete(photo)
     
-    # Decrement storage usage
+    # Decrement storage usage (Restore quota to the album owner)
+    billable_user_id = photo.owner_id # Default to photo owner
+    if photo.album_id:
+        album = db.query(models.Album).filter(models.Album.id == photo.album_id).first()
+        if album:
+            billable_user_id = album.owner_id
+            
     if photo_size > 0:
         stmt = (
             update(models.User)
-            .where(models.User.id == current_user.id)
+            .where(models.User.id == billable_user_id)
             .values(storage_used=models.User.storage_used - photo_size)
         )
         db.execute(stmt)
