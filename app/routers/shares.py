@@ -13,18 +13,18 @@ def get_share_info(token: str, db: Session = Depends(get_db)):
     share = db.query(Share).filter(Share.token == token).first()
     if not share:
         # 区分撤回（找不到记录）
-        raise HTTPException(status_code=404, detail="Share link revoked or not found")
+        raise HTTPException(status_code=404, detail="分享链接已撤销或不存在")
         
     # Fix: Compare timezone-aware datetime with timezone-aware datetime
     now = datetime.now(timezone.utc)
     
     if share.expires_at and share.expires_at < now:
         # 区分过期
-        raise HTTPException(status_code=410, detail="Share link expired")
+        raise HTTPException(status_code=410, detail="分享链接已过期")
         
     album = db.query(Album).filter(Album.id == share.album_id).first()
     if not album:
-            raise HTTPException(status_code=404, detail="Album not found")
+            raise HTTPException(status_code=404, detail="相册不存在")
 
     # 获取最新一张照片作为封面
     latest_photo = db.query(Photo).filter(Photo.album_id == album.id).order_by(desc(Photo.created_at)).first()

@@ -28,7 +28,7 @@ async def upload_photo(
 ):
     # 1. Validate file
     if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
+        raise HTTPException(status_code=400, detail="文件必须是图片")
     
     ext = os.path.splitext(file.filename)[1]
     if not ext:
@@ -50,7 +50,7 @@ async def upload_photo(
         
         if not album:
              # 如果指定了 ID 但找不到，抛出错误（或者回退到默认相册？这里选择抛错更严谨）
-             raise HTTPException(status_code=404, detail="Album not found")
+             raise HTTPException(status_code=404, detail="相册不存在")
 
         # 2. 确定计费用户（相册拥有者）
         billable_user_id = album.owner_id
@@ -65,19 +65,19 @@ async def upload_photo(
                  share = db.query(models.Share).filter(models.Share.token == share_token).first()
                  
                  if not share:
-                     raise HTTPException(status_code=403, detail="Invalid share token")
-                 
-                 if share.album_id != final_album_id:
-                     raise HTTPException(status_code=403, detail="Share token does not match this album")
-                     
-                 if share.expires_at and share.expires_at < current_time:
-                     raise HTTPException(status_code=403, detail="Share token expired")
-                     
-                 if share.permission != "upload":
-                     raise HTTPException(status_code=403, detail="Insufficient permission: Upload access required")
-                     
-             else:
-                raise HTTPException(status_code=403, detail="Permission denied: You need a valid share token to upload to this album")
+                    raise HTTPException(status_code=403, detail="无效的分享令牌")
+                
+                if share.album_id != final_album_id:
+                    raise HTTPException(status_code=403, detail="分享令牌与此相册不匹配")
+                    
+                if share.expires_at and share.expires_at < current_time:
+                    raise HTTPException(status_code=403, detail="分享令牌已过期")
+                    
+                if share.permission != "upload":
+                    raise HTTPException(status_code=403, detail="权限不足：需要上传权限")
+                    
+            else:
+                raise HTTPException(status_code=403, detail="权限拒绝：您需要有效的分享令牌才能上传到此相册")
     else:
         # Find or create default album for current_user
         default_album = db.query(models.Album).filter(
@@ -110,7 +110,7 @@ async def upload_photo(
     db.commit()
     
     if result.rowcount == 0:
-        raise HTTPException(status_code=403, detail="Storage limit exceeded for the album owner")
+        raise HTTPException(status_code=403, detail="相册拥有者存储空间已满")
 
     photo_id = str(uuid.uuid4())
     object_name = f"photos/{billable_user_id}/{photo_id}{ext}" # Use billable_user_id for storage path? Or current_user? 
@@ -175,7 +175,7 @@ async def upload_photo(
              db.execute(rollback_stmt)
              db.commit()
         
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 @router.get("", response_model=PhotoListResponse)
 def get_photos(
@@ -197,14 +197,14 @@ def get_photos(
             share = db.query(models.Share).filter(models.Share.token == share_token).first()
             
             if not share:
-                raise HTTPException(status_code=403, detail="Invalid share token")
+                raise HTTPException(status_code=403, detail="无效的分享令牌")
             
             if share.album_id != album_id:
-                raise HTTPException(status_code=403, detail="Share token does not match this album")
+                raise HTTPException(status_code=403, detail="分享令牌与此相册不匹配")
                 
             current_time = datetime.now(timezone.utc)
             if share.expires_at and share.expires_at < current_time:
-                raise HTTPException(status_code=403, detail="Share token expired")
+                raise HTTPException(status_code=403, detail="分享令牌已过期")
             
             # Token 校验通过，允许访问该相册下的所有照片
             # 不再校验 owner_id
@@ -224,7 +224,7 @@ def get_photos(
             if album.owner_id != current_user.id:
                 # 再次检查数据库中是否有针对该用户的直接授权（如果有的话），或者是否是管理员
                 # 目前只支持所有者访问，或者通过 Token 访问
-                raise HTTPException(status_code=403, detail="Not authorized to access this album")
+                raise HTTPException(status_code=403, detail="无权访问此相册")
         
         # 过滤该相册下的所有照片
         query = query.filter(models.Photo.album_id == album_id)
@@ -272,7 +272,7 @@ def get_photo(
     ).first()
     
     if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
+        raise HTTPException(status_code=404, detail="照片不存在")
         
     # Optimization: Manually set owner
     photo.owner = current_user
@@ -296,7 +296,7 @@ def get_user_photos(
         if not target_user:
              # If user not found, we return empty list or 404. Here we return empty list to be safe or 404?
              # Let's return 404 as "User not found" makes sense
-             raise HTTPException(status_code=404, detail="User not found")
+             raise HTTPException(status_code=404, detail="用户不存在")
 
     # TODO: Add privacy check (e.g., if album is public) or admin check here
     query = db.query(models.Photo).filter(models.Photo.owner_id == user_id)
@@ -333,7 +333,7 @@ def delete_photo(
     ).first()
     
     if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
+        raise HTTPException(status_code=404, detail="照片不存在")
 
     # Permission Check:
     # 1. Photo Owner can delete
@@ -347,7 +347,7 @@ def delete_photo(
             can_delete = True
             
     if not can_delete:
-        raise HTTPException(status_code=403, detail="Permission denied: You cannot delete this photo")
+        raise HTTPException(status_code=403, detail="权限拒绝：您不能删除此照片")
     
     photo_size = photo.size if photo.size else 0
 
