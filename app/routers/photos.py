@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import update
 from typing import Optional, List
+from datetime import datetime
 import uuid
 import os
 import math
@@ -172,72 +173,69 @@ def get_photos(
     page: int = 1,
     size: int = 20,
     album_id: Optional[str] = None,
+    share_token: Optional[str] = None, # 新增 share_token 参数
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Photo)
     
     if album_id:
-        # 如果指定了 album_id
-        # 1. 检查相册是否存在
-        album = db.query(models.Album).filter(models.Album.id == album_id).first()
-        if not album:
-             # 如果相册不存在，返回空列表或者 404，这里保持行为一致返回空
-             return {
-                "items": [],
-                "total": 0,
-                "page": page,
-                "size": size,
-                "pages": 0
-            }
-            
-        # 2. 权限检查：是否是所有者，或者是否有分享权限
-        if album.owner_id != current_user.id:
+        # 场景1：查看特定相册
+        
+        # 优先检查 share_token
+        if share_token:
+            # 校验 Share Token
             current_time = datetime.utcnow()
             valid_share = db.query(models.Share).filter(
-                models.Share.album_id == album_id,
+                models.Share.token == share_token,
+                models.Share.album_id == album_id, # Token 必须匹配请求的 album_id
                 (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
             ).first()
             
             if not valid_share:
-                # 既不是所有者，也没有分享链接，拒绝访问
-                 raise HTTPException(status_code=403, detail="Not authorized to access this album")
+                raise HTTPException(status_code=403, detail="Invalid or expired share token")
+            
+            # Token 校验通过，允许访问该相册下的所有照片
+            # 不再校验 owner_id
+            
+        else:
+            # 没有 Token，走常规权限校验（是否是所有者）
+            album = db.query(models.Album).filter(models.Album.id == album_id).first()
+            if not album:
+                 return {
+                    "items": [],
+                    "total": 0,
+                    "page": page,
+                    "size": size,
+                    "pages": 0
+                }
+            
+            if album.owner_id != current_user.id:
+                # 再次检查数据库中是否有针对该用户的直接授权（如果有的话），或者是否是管理员
+                # 目前只支持所有者访问，或者通过 Token 访问
+                raise HTTPException(status_code=403, detail="Not authorized to access this album")
         
-        # 3. 过滤该相册下的所有照片（不限制 owner_id，因为可能是别人上传的）
+        # 过滤该相册下的所有照片
         query = query.filter(models.Photo.album_id == album_id)
         
     else:
-        # 如果没有指定 album_id，则默认只显示当前用户上传的照片（例如在"所有照片"视图中）
+        # 场景2：查看“所有照片”（时间线）
+        # 仅限查看自己的照片
         query = query.filter(models.Photo.owner_id == current_user.id)
     
     # Order by created_at desc
     query = query.order_by(models.Photo.created_at.desc())
+    
+    if album_id and share_token:
+        query = query.options(joinedload(models.Photo.owner))
         
     total = query.count()
     photos = query.offset((page - 1) * size).limit(size).all()
     
-    # Optimization: Manually set owner to avoid N+1 query
-    # 这里需要注意，如果是共享相册，照片的 owner 可能不全是一样
-    # 如果 owner_id == current_user.id，可以直接赋值
-    # 否则，可能需要 eager load 或者单独查询（为了性能，这里最好加上 joinedload(models.Photo.owner)）
-    # 但由于 PhotoResponse 中 owner 字段可能不是必须的，或者我们可以批量获取 user 信息
-    
-    # 既然已经重构了，我们简单处理：对于非当前用户的照片，owner 信息可能需要额外获取
-    # 为了简化，我们暂时只给当前用户的照片填充 owner，其他人的照片 owner 可能会触发 lazy load
-    # 或者我们可以用 joinedload 预加载
-    
-    # 重新构造查询以包含 owner 信息
-    if album_id:
-         # 只有在查询特定相册时（可能包含别人的照片），才需要 joinedload
-         # 但上面的 query 已经执行了... 
-         # 实际上，由于 SQLAlchemy 的特性，我们可以在 query 定义时就加上 options
-         pass
-         
-    # 填充 owner (针对已经是对象的 photo)
+    # Optimization: Manually set owner if it's current user
     for photo in photos:
         if photo.owner_id == current_user.id:
             photo.owner = current_user
-        # else: photo.owner will be lazy loaded if accessed
     
     pages = math.ceil(total / size) if size > 0 else 0
         
