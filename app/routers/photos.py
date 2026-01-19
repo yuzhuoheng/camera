@@ -77,9 +77,7 @@ async def upload_photo(
                      raise HTTPException(status_code=403, detail="Insufficient permission: Upload access required")
                      
              else:
-                 # 如果没有传 token，尝试在数据库中查找是否存在有效的 token (兼容旧逻辑，但不太严谨，建议前端必须传 token)
-                 # 为了安全性，最好要求必须传 token。这里我们先保持严格：非 owner 必须传 token。
-                 raise HTTPException(status_code=403, detail="Permission denied: You need a valid share token to upload to this album")
+                raise HTTPException(status_code=403, detail="Permission denied: You need a valid share token to upload to this album")
     else:
         # Find or create default album for current_user
         default_album = db.query(models.Album).filter(
