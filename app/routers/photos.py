@@ -57,26 +57,23 @@ async def upload_photo(
         
         # 3. 权限检查
         if album.owner_id != current_user.id:
-             # 检查是否有上传权限的分享链接
-             current_time = datetime.now(timezone.utc)
+            # 检查是否有上传权限的分享链接
+            current_time = datetime.now(timezone.utc)
              
-             # 优先使用前端传递的 share_token 进行验证
-             if share_token:
-                 share = db.query(models.Share).filter(models.Share.token == share_token).first()
+            # 优先使用前端传递的 share_token 进行验证
+            if share_token:
+                share = db.query(models.Share).filter(models.Share.token == share_token).first()
                  
-                 if not share:
+                if not share:
                     raise HTTPException(status_code=403, detail="无效的分享令牌")
-                
                 if share.album_id != final_album_id:
                     raise HTTPException(status_code=403, detail="分享令牌与此相册不匹配")
-                    
                 if share.expires_at and share.expires_at < current_time:
                     raise HTTPException(status_code=403, detail="分享令牌已过期")
-                    
                 if share.permission != "upload":
                     raise HTTPException(status_code=403, detail="权限不足：需要上传权限")
-                    
             else:
+
                 raise HTTPException(status_code=403, detail="权限拒绝：您需要有效的分享令牌才能上传到此相册")
     else:
         # Find or create default album for current_user
