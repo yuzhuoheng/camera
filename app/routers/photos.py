@@ -62,15 +62,20 @@ async def upload_photo(
              
              # 优先使用前端传递的 share_token 进行验证
              if share_token:
-                 valid_share = db.query(models.Share).filter(
-                     models.Share.token == share_token,
-                     models.Share.album_id == final_album_id,
-                     models.Share.permission == "upload", # 必须是上传权限
-                     (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
-                 ).first()
+                 share = db.query(models.Share).filter(models.Share.token == share_token).first()
                  
-                 if not valid_share:
-                     raise HTTPException(status_code=403, detail="Invalid or expired share token for upload")
+                 if not share:
+                     raise HTTPException(status_code=403, detail="Invalid share token")
+                 
+                 if share.album_id != final_album_id:
+                     raise HTTPException(status_code=403, detail="Share token does not match this album")
+                     
+                 if share.expires_at and share.expires_at < current_time:
+                     raise HTTPException(status_code=403, detail="Share token expired")
+                     
+                 if share.permission != "upload":
+                     raise HTTPException(status_code=403, detail="Insufficient permission: Upload access required")
+                     
              else:
                  # 如果没有传 token，尝试在数据库中查找是否存在有效的 token (兼容旧逻辑，但不太严谨，建议前端必须传 token)
                  # 为了安全性，最好要求必须传 token。这里我们先保持严格：非 owner 必须传 token。
@@ -191,15 +196,17 @@ def get_photos(
         # 优先检查 share_token
         if share_token:
             # 校验 Share Token
-            current_time = datetime.now(timezone.utc)
-            valid_share = db.query(models.Share).filter(
-                models.Share.token == share_token,
-                models.Share.album_id == album_id, # Token 必须匹配请求的 album_id
-                (models.Share.expires_at == None) | (models.Share.expires_at > current_time)
-            ).first()
+            share = db.query(models.Share).filter(models.Share.token == share_token).first()
             
-            if not valid_share:
-                raise HTTPException(status_code=403, detail="Invalid or expired share token")
+            if not share:
+                raise HTTPException(status_code=403, detail="Invalid share token")
+            
+            if share.album_id != album_id:
+                raise HTTPException(status_code=403, detail="Share token does not match this album")
+                
+            current_time = datetime.now(timezone.utc)
+            if share.expires_at and share.expires_at < current_time:
+                raise HTTPException(status_code=403, detail="Share token expired")
             
             # Token 校验通过，允许访问该相册下的所有照片
             # 不再校验 owner_id

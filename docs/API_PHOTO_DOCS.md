@@ -59,6 +59,7 @@
 | `page` | int | 否 | 页码 (默认 1) |
 | `size` | int | 否 | 每页数量 (默认 20) |
 | `album_id` | string | 否 | 按相册 ID 筛选 |
+| `share_token` | string | 否 | 分享 Token。如果查看他人分享的相册，此字段必填。 |
 
 ### 响应结果 (Response)
 
