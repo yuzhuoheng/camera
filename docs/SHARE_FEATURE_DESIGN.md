@@ -31,7 +31,7 @@
 *   **参数**: `file`, `album_id`, `share_token`
 *   **校验**:
     1.  Token 是否存在、匹配相册且未过期。
-    2.  Token 的权限字段 `permission` 是否为 `upload`。
+    2.  Token 的权限字段 `permission` 是否为 `allow_upload`。
 *   **计费 (Billing)**:
     *   **存储空间扣减**: 照片占用的存储空间将从 **相册拥有者 (Owner)** 的配额中扣除，而不是上传者 (Visitor)。
     *   **原因**: 相册是 Owner 的资产，Visitor 只是贡献内容。这符合通常的共享相册逻辑（如 Google Photos 共享相册）。
