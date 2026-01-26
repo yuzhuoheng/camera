@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # 如果不设置，默认使用 http/https + MINIO_ENDPOINT
     MINIO_EXTERNAL_ENDPOINT: Optional[str] = None
     
+    # App Base URL (用于构建静态文件完整路径)
+    # 如果未设置，将尝试使用 MINIO_EXTERNAL_ENDPOINT 或默认值
+    APP_BASE_URL: Optional[str] = None
+    
     # Security
     SECRET_KEY: str
     ALGORITHM: str = "HS256"

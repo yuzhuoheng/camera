@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from app.core.config import get_settings
 from app.routers import auth, albums, photos, shares, invites
@@ -36,6 +37,10 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan
 )
+
+# Mount static files
+# 挂载到 /cs-server/api/v1/static 以匹配 API_V1_STR
+app.mount(f"{settings.API_V1_STR}/static", StaticFiles(directory="static"), name="static")
 
 # Include Routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])

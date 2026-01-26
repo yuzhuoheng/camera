@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.config import get_settings
@@ -9,7 +9,7 @@ from app.schemas.token import Token
 from app.schemas.user import User, UserUpdate
 from app.core.deps import get_current_user
 from app.services.storage import minio_client
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from app.utils.random_utils import generate_random_nickname, get_animal_avatar_url
 import uuid
 import os
 import httpx
@@ -139,9 +139,22 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         is_new_user = True
         user = models.User(id=openid)
+        
+        # 初始化默认值
+        # 1. 随机生成昵称
+        random_nickname = generate_random_nickname()
+        user.nickname = random_nickname
+        
+        # 2. 根据昵称中的动物名，生成对应的随机头像
+        user.avatar_url = get_animal_avatar_url(random_nickname)
+        
         if request.userInfo:
-            user.nickname = request.userInfo.nickName
-            user.avatar_url = request.userInfo.avatarUrl
+            if request.userInfo.nickName:
+                user.nickname = request.userInfo.nickName
+            # 只有当 avatarUrl 存在且不是临时地址时才使用
+            if request.userInfo.avatarUrl and not request.userInfo.avatarUrl.startswith(("http://tmp", "wxfile://")):
+                user.avatar_url = request.userInfo.avatarUrl
+                
         db.add(user)
         
         # Record initial quota log

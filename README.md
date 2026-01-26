@@ -55,6 +55,12 @@ MINIO_SECURE=False
 
 # Security
 SECRET_KEY=your_super_secret_key_change_this
+
+# App Base URL (Optional)
+# 用于构建静态资源的完整访问路径 (如头像)
+# 如果不设置，默认尝试使用 MINIO_EXTERNAL_ENDPOINT 或返回相对路径
+# 示例: https://api.example.com
+APP_BASE_URL=http://localhost:8000
 ```
 
 ### 4. 运行服务

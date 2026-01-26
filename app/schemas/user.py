@@ -15,8 +15,10 @@ class UserUpdate(UserBase):
 class User(UserBase):
     id: str
     created_at: datetime
-    storage_used: int = 0
-    storage_limit: int = 524288000
 
     class Config:
         from_attributes = True
+
+class UserAdmin(User):
+    storage_used: int
+    storage_limit: int
