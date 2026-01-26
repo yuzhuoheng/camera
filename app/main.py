@@ -6,6 +6,7 @@ from app.routers import auth, albums, photos, shares, invites
 from app.core.database import engine, Base
 from app.models import models
 from app.core.deps_check import check_dependencies
+from app.core.admin import setup_admin
 import logging
 
 # Configure logging
@@ -52,3 +53,6 @@ app.include_router(invites.router, prefix=f"{settings.API_V1_STR}/invites", tags
 @app.get("/")
 def root():
     return {"message": "Welcome to Camera Server API"}
+
+# Setup Admin Interface
+setup_admin(app, engine)
