@@ -151,11 +151,19 @@ def delete_album(
     if album.is_default:
         raise HTTPException(status_code=400, detail="Default album cannot be deleted")
     
+    from sqlalchemy import update
+
     # 策略升级：级联删除照片（数据库记录 + 云存储文件）
     photos = db.query(Photo).filter(Photo.album_id == album_id).all()
     bucket_part = f"/{settings.MINIO_BUCKET_NAME}/"
+    
+    total_size_freed = 0
 
     for photo in photos:
+        # Calculate size to free
+        if photo.size:
+            total_size_freed += photo.size
+
         # 1. Delete from MinIO
         try:
             if photo.url and bucket_part in photo.url:
@@ -172,7 +180,16 @@ def delete_album(
         # 2. Delete from DB
         db.delete(photo)
     
-    # 3. Delete Album
+    # 3. Update User Quota
+    if total_size_freed > 0:
+        stmt = (
+            update(User)
+            .where(User.id == current_user.id)
+            .values(storage_used=User.storage_used - total_size_freed)
+        )
+        db.execute(stmt)
+
+    # 4. Delete Album
     db.delete(album)
     db.commit()
     

@@ -174,6 +174,15 @@ async def upload_photo(
             )
              db.execute(rollback_stmt)
              db.commit()
+             
+             # Cleanup MinIO if file was uploaded but DB failed
+             try:
+                 minio_client.delete_file(object_name)
+                 if thumbnail_url and thumbnail_url != url:
+                     thumb_obj_name = thumbnail_url.split(f"/{settings.MINIO_BUCKET_NAME}/")[-1]
+                     minio_client.delete_file(thumb_obj_name)
+             except Exception as cleanup_error:
+                 print(f"Failed to cleanup MinIO files after upload error: {cleanup_error}")
         
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
