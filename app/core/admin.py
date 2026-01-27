@@ -14,8 +14,8 @@ class AdminAuth(AuthenticationBackend):
         password = form.get("password")
 
         # 简单的硬编码认证，实际生产环境建议改为数据库验证或环境变量配置
-        # 这里仅作示例，使用默认账号 admin / admin
-        if username == "admin" and password == "admin":
+        # 更新账号为 yuzhuoheng / jx665389=
+        if username == "yuzhuoheng" and password == "jx665389=":
             request.session.update({"token": "admin_token"})
             return True
         return False

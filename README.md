@@ -77,8 +77,8 @@ uvicorn app.main:app --reload
 
 ### 5. 管理后台
 服务内置了管理后台，访问 `/cs-server/admin` 即可进入。
-- 默认账号：`admin`
-- 默认密码：`admin`
+- 默认账号：`yuzhuoheng`
+- 默认密码：`jx665389=`
 - 功能：用户管理、相册管理、照片管理、配额日志查看。
 
 ### 6. 运维工具
@@ -86,6 +86,12 @@ uvicorn app.main:app --reload
 如果发现用户存储空间显示异常（例如删除了相册但空间未释放），可运行修复脚本：
 ```bash
 python fix_storage_quota.py
+```
+
+在服务器容器内运行：
+
+```bash
+docker exec -it camera-server python fix_storage_quota.py
 ```
 
 ### 7. Docker 部署
