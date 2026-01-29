@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import get_settings
 from app.routers import auth, albums, photos, shares, invites
@@ -38,6 +39,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan
 )
+
+# Add GZip compression
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Mount static files
 # 挂载到 /cs-server/api/v1/static 以匹配 API_V1_STR
