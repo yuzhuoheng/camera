@@ -94,6 +94,24 @@ python fix_storage_quota.py
 docker exec -it camera-server python fix_storage_quota.py
 ```
 
+**批量转换图片地址 (HTTP / HTTPS 切换)**：
+如果数据库中保存的图片链接需要批量在 `http` 和 `https` 之间切换，可运行此脚本。它会自动更新用户头像、相册封面、照片原图及缩略图地址。
+
+在服务器容器内运行（默认将 `https` 转换为 `http`）：
+```bash
+docker exec -it camera-server python replace_https_to_http.py
+```
+
+如果需要将 `http` 转换为 `https`，请使用 `--to https` 参数：
+```bash
+docker exec -it camera-server python replace_https_to_http.py --to https
+```
+
+在本地环境运行同样支持该参数：
+```bash
+python replace_https_to_http.py --to https
+```
+
 ### 7. Docker 部署
 
 构建镜像：
