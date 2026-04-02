@@ -180,7 +180,19 @@ def list_album_photos(
     db: Session = Depends(get_db),
 ):
     photos = (
-        db.query(Photo)
+        db.query(
+            Photo.id.label("id"),
+            Photo.filename.label("filename"),
+            Photo.url.label("url"),
+            Photo.thumbnail_url.label("thumbnail_url"),
+            Photo.size.label("size"),
+            Photo.owner_id.label("owner_id"),
+            Photo.album_id.label("album_id"),
+            Photo.created_at.label("created_at"),
+            User.nickname.label("owner_nickname"),
+            User.avatar_url.label("owner_avatar_url"),
+        )
+        .outerjoin(User, User.id == Photo.owner_id)
         .filter(Photo.album_id == album_id)
         .order_by(Photo.created_at.desc())
         .offset(skip)
@@ -195,6 +207,8 @@ def list_album_photos(
             "thumbnail_url": photo.thumbnail_url,
             "size": photo.size,
             "owner_id": photo.owner_id,
+            "owner_nickname": photo.owner_nickname,
+            "owner_avatar_url": photo.owner_avatar_url,
             "album_id": photo.album_id,
             "created_at": photo.created_at,
         }
@@ -254,8 +268,16 @@ def media_proxy(
     )
     if minio_parsed.hostname:
         allowed_hosts.add(minio_parsed.hostname)
-    if parsed.hostname not in allowed_hosts:
-        raise HTTPException(status_code=403, detail="不允许的媒体地址")
+        
+    # 添加内网常用IP段或允许所有的内部IP进行代理
+    # 因为用户的照片可能存在 192.168.x.x, 10.x.x.x, 127.0.0.1 等
+    if parsed.hostname not in allowed_hosts and not (
+        parsed.hostname.startswith("192.168.") or 
+        parsed.hostname.startswith("10.") or 
+        parsed.hostname.startswith("127.") or 
+        parsed.hostname == "localhost"
+    ):
+        raise HTTPException(status_code=403, detail=f"不允许的媒体地址: {parsed.hostname}")
 
     try:
         with httpx.Client(timeout=20.0, follow_redirects=True) as client:

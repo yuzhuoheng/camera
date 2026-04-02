@@ -102,7 +102,8 @@ function normalizeMediaUrl(rawUrl) {
 function mediaProxyUrl(rawUrl) {
   const normalized = normalizeMediaUrl(rawUrl);
   if (!normalized) return "";
-  return `${API_BASE}/media-proxy?url=${encodeURIComponent(normalized)}`;
+  const t = token();
+  return `${API_BASE}/media-proxy?url=${encodeURIComponent(normalized)}${t ? `&token=${encodeURIComponent(t)}` : ""}`;
 }
 
 function getAvatarCell(user) {
@@ -169,7 +170,10 @@ function openModal(title, html) {
   el.modalTitle.textContent = title;
   el.modalBody.innerHTML = html;
   el.modal.classList.remove("hidden");
-  document.body.appendChild(el.modal);
+  // 确保 modal 永远在 body 最末尾，脱离任何父级的 overflow / stacking context 限制
+  if (el.modal.parentElement !== document.body) {
+    document.body.appendChild(el.modal);
+  }
 }
 
 function closeModal() {
@@ -289,15 +293,21 @@ function setAlbumsRows(albumsData) {
   });
 }
 
-function setStats(users, albums) {
-  const userCount = users.length;
-  const albumCount = albums.length;
+function setStats(usersData, albumsData) {
+  const users = Array.isArray(usersData) ? usersData : usersData.items || [];
+  const albums = Array.isArray(albumsData) ? albumsData : albumsData.items || [];
+  
   let photoCount = 0;
   let storageUsed = 0;
   for (const u of users) {
     photoCount += Number(u.photo_count || 0);
     storageUsed += Number(u.storage_used || 0);
   }
+  
+  // 对于分页情况下的总数，我们应当使用接口返回的 total 字段（如果存在）
+  const userCount = usersData.total !== undefined ? usersData.total : users.length;
+  const albumCount = albumsData.total !== undefined ? albumsData.total : albums.length;
+  
   el.statUsers.textContent = fmtInt(userCount);
   el.statAlbums.textContent = fmtInt(albumCount);
   el.statPhotos.textContent = fmtInt(photoCount);
@@ -396,11 +406,22 @@ async function showAlbumPhotos(albumId, albumName) {
                 const thumbProxy = mediaProxyUrl(thumb);
                 const rawLink = normalizeMediaUrl(p.url || "");
                 const link = rawLink ? `href="${escapeHtml(rawLink)}"` : "";
+                const ownerAvatar = normalizeMediaUrl(p.owner_avatar_url || "");
+                const ownerAvatarProxy = mediaProxyUrl(ownerAvatar);
+                const ownerName = p.owner_nickname || p.owner_id || "未知用户";
+                const ownerInitial = (ownerName || "U").slice(0, 1).toUpperCase();
+                const ownerAvatarHtml = ownerAvatarProxy
+                  ? `<img class="photo-owner-avatar" src="${ownerAvatarProxy}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'photo-owner-avatar-fallback',textContent:'${escapeHtml(ownerInitial)}'}))">`
+                  : `<span class="photo-owner-avatar-fallback">${escapeHtml(ownerInitial)}</span>`;
                 const img = thumbProxy ? `<img class="photo-card-img" src="${thumbProxy}" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'><rect width=\\'100\\' height=\\'100\\' fill=\\'%23edf3ff\\'/><text x=\\'50\\' y=\\'50\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%238593af\\' font-size=\\'14\\'>无图</text></svg>'">` : `<div class="photo-card-img-placeholder">无图</div>`;
                 return `
                   <a class="photo-card" ${link} target="_blank" rel="noopener noreferrer">
                     <div class="photo-card-img-wrapper">${img}</div>
                     <div class="photo-card-info">
+                      <div class="photo-owner-row">
+                        ${ownerAvatarHtml}
+                        <span class="photo-owner-name">${escapeHtml(ownerName)}</span>
+                      </div>
                       <div class="photo-card-time">${fmtTime(p.created_at)}</div>
                       <div class="photo-card-size">${fmtBytes(p.size)}</div>
                     </div>

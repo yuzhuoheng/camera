@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from app.core.config import get_settings
 
 settings = get_settings()
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def verify_admin_credentials(username: str, password: str) -> bool:
@@ -23,8 +23,13 @@ def create_admin_token() -> str:
 
 def get_current_admin(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    token_query: str = Query(None, alias="token"),
 ) -> str:
-    token = credentials.credentials
+    token = token_query
+    if not token and credentials:
+        token = credentials.credentials
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin token required")
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except JWTError:
