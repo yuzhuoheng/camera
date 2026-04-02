@@ -1,8 +1,10 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Optional
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     API_V1_STR: str = "/cs-server/api/v1"
     PROJECT_NAME: str = "一册一刻"
     
@@ -34,13 +36,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    ADMIN_USERNAME: str = "yuzhuoheng"
+    ADMIN_PASSWORD: str = "jx665389="
 
     # WeChat
     WECHAT_APP_ID: Optional[str] = None
     WECHAT_APP_SECRET: Optional[str] = None
-
-    class Config:
-        env_file = ".env"
 
     def assemble_db_url(self):
         if self.SQLALCHEMY_DATABASE_URI:

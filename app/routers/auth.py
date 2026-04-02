@@ -139,6 +139,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         is_new_user = True
         user = models.User(id=openid)
+        user.last_login_at = datetime.utcnow()
         
         # 初始化默认值
         # 1. 随机生成昵称
@@ -249,12 +250,13 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     else:
         # 这里的逻辑可优化：每次登录是否更新头像昵称？
         # 目前简单处理：如果传了且不一致则更新
+        user.last_login_at = datetime.utcnow()
         if request.userInfo:
             if request.userInfo.nickName != user.nickname:
                 user.nickname = request.userInfo.nickName
             if request.userInfo.avatarUrl != user.avatar_url:
                 user.avatar_url = request.userInfo.avatarUrl
-            db.commit()
+        db.commit()
 
     # 3. 生成 JWT Token
     access_token = create_access_token(data={"sub": user.id})

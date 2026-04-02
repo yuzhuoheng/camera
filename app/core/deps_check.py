@@ -85,7 +85,9 @@ def check_dependencies():
                     if table_name == "users":
                         expected_new_columns = [
                             {"name": "storage_used", "type": "BIGINT DEFAULT 0"},
-                            {"name": "storage_limit", "type": "BIGINT DEFAULT 524288000"}
+                            {"name": "storage_limit", "type": "BIGINT DEFAULT 524288000"},
+                            {"name": "last_login_at", "type": "TIMESTAMPTZ NULL"},
+                            {"name": "email", "type": "VARCHAR"}
                         ]
                     elif table_name == "photos":
                         expected_new_columns = [

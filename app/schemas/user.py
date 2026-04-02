@@ -15,6 +15,7 @@ class UserUpdate(UserBase):
 class User(UserBase):
     id: str
     created_at: datetime
+    last_login_at: Optional[datetime] = None
     storage_used: int
     storage_limit: int
 

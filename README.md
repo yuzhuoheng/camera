@@ -73,13 +73,17 @@ uvicorn app.main:app --reload
 
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- Admin Dashboard: [http://localhost:8000/cs-server/admin](http://localhost:8000/cs-server/admin)
+- Admin UI: [http://localhost:8000/cs-server/admin-ui](http://localhost:8000/cs-server/admin-ui)
+- Admin (sqladmin 兜底): [http://localhost:8000/cs-server/admin](http://localhost:8000/cs-server/admin)
 
 ### 5. 管理后台
-服务内置了管理后台，访问 `/cs-server/admin` 即可进入。
-- 默认账号：`yuzhuoheng`
-- 默认密码：`jx665389=`
-- 功能：用户管理、相册管理、照片管理、配额日志查看。
+服务内置了新版管理页面，访问 `/cs-server/admin-ui` 即可进入。
+- 管理员账号环境变量：`ADMIN_USERNAME`（默认 `yuzhuoheng`）
+- 管理员密码环境变量：`ADMIN_PASSWORD`（默认 `jx665389=`）
+- 当前页面以只读查看为主，包含：
+  - 用户列表：OpenID、昵称、最近登录时间、相册数、照片数、已使用空间、配额上限。
+  - 相册列表：可进入相册详情查看该相册下全部照片。
+  - 用户维度：可查看该用户的配额日志记录。
 
 ### 6. 运维工具
 **存储配额修正**：
@@ -94,22 +98,34 @@ python fix_storage_quota.py
 docker exec -it camera-server python fix_storage_quota.py
 ```
 
-**批量转换图片地址 (HTTP / HTTPS 切换)**：
-如果数据库中保存的图片链接需要批量在 `http` 和 `https` 之间切换，可运行此脚本。它会自动更新用户头像、相册封面、照片原图及缩略图地址。
+**批量替换图片地址前缀**：
+如果数据库中保存的图片链接需要批量替换前缀，可运行脚本。会自动处理用户头像、相册封面、照片原图及缩略图地址。
 
-在服务器容器内运行（默认将 `https` 转换为 `http`）：
+脚本名：`replace_url_prefix.py`。
+
+1) 协议切换（默认 `https:// -> http://`）：
 ```bash
-docker exec -it camera-server python replace_https_to_http.py
+docker exec -it camera-server python replace_url_prefix.py
 ```
 
-如果需要将 `http` 转换为 `https`，请使用 `--to https` 参数：
+2) 切换为 `https://`：
 ```bash
-docker exec -it camera-server python replace_https_to_http.py --to https
+docker exec -it camera-server python replace_url_prefix.py --to https
 ```
 
-在本地环境运行同样支持该参数：
+3) 自定义前缀替换（例如域名补 `www`）：
 ```bash
-python replace_https_to_http.py --to https
+docker exec -it camera-server python replace_url_prefix.py --from-prefix "https://yuzhuoheng.xyz" --to-prefix "https://www.yuzhuoheng.xyz"
+```
+
+4) 仅预览将更新数量（不写库）：
+```bash
+docker exec -it camera-server python replace_url_prefix.py --from-prefix "https://yuzhuoheng.xyz" --to-prefix "https://www.yuzhuoheng.xyz" --dry-run
+```
+
+本地环境用法一致：
+```bash
+python replace_url_prefix.py --help
 ```
 
 ### 7. Docker 部署

@@ -13,7 +13,9 @@ class User(Base):
     id = Column(String, primary_key=True, index=True) # openid
     nickname = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
+    email = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
     
     # Storage quota
     storage_used = Column(BigInteger, default=0) # bytes
@@ -24,6 +26,14 @@ class User(Base):
     quota_logs = relationship("UserQuotaLog", back_populates="user")
     invites_sent = relationship("UserInvite", foreign_keys="[UserInvite.inviter_id]", back_populates="inviter")
     invites_received = relationship("UserInvite", foreign_keys="[UserInvite.invitee_id]", back_populates="invitee")
+
+    @property
+    def album_count(self):
+        return len(self.albums or [])
+
+    @property
+    def photo_count(self):
+        return len(self.photos or [])
 
 class UserQuotaLog(Base):
     __tablename__ = "user_quota_logs"
@@ -65,6 +75,10 @@ class Album(Base):
     owner = relationship("User", back_populates="albums")
     photos = relationship("Photo", back_populates="album")
     shares = relationship("Share", back_populates="album")
+
+    @property
+    def photo_count(self):
+        return len(self.photos or [])
 
 class Photo(Base):
     __tablename__ = "photos"

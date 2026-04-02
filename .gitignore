@@ -1,7 +1,8 @@
 __pycache__/
 *.pyc
-.env
 .venv/
+.env
+.env-dev
 env/
 venv/
 .idea/

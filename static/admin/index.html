@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台</title>
+  <link rel="stylesheet" href="/cs-server/admin-ui/static/style.css">
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div id="loginView" class="view">
+    <div class="login-card">
+      <div class="brand-pill">一册一刻</div>
+      <h1>管理后台</h1>
+      <p>请输入管理员账号登录</p>
+      <form id="loginForm" class="form">
+        <label>用户名</label>
+        <input id="username" type="text" autocomplete="username" required>
+        <label>密码</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button type="submit">登录</button>
+      </form>
+      <div id="loginError" class="error"></div>
+    </div>
+  </div>
+
+  <div id="appView" class="view hidden">
+    <div class="layout-wrapper">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-logo">📸</div>
+          <span class="brand-text">一册一刻</span>
+        </div>
+        <nav class="sidebar-nav">
+          <button class="nav-item active tab" data-tab="users">
+            <span class="icon">👤</span>
+            <span class="text">用户管理</span>
+          </button>
+          <button class="nav-item tab" data-tab="albums">
+            <span class="icon">🖼️</span>
+            <span class="text">相册管理</span>
+          </button>
+        </nav>
+      </aside>
+
+      <div class="main-wrapper">
+        <header class="topbar">
+          <div class="topbar-left">
+            <h2 id="pageTitle">用户管理</h2>
+          </div>
+          <div class="topbar-right">
+            <button id="logoutBtn" class="btn-danger-text">退出登录</button>
+          </div>
+        </header>
+
+        <main class="content-area">
+          <section class="stats-grid">
+            <article class="stat-card">
+              <div class="stat-icon">👥</div>
+              <div class="stat-info">
+                <div class="stat-label">用户总数</div>
+                <div id="statUsers" class="stat-value">-</div>
+                <div class="stat-hint">当前系统注册用户</div>
+              </div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon">📚</div>
+              <div class="stat-info">
+                <div class="stat-label">相册总数</div>
+                <div id="statAlbums" class="stat-value">-</div>
+                <div class="stat-hint">包含默认与普通相册</div>
+              </div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon">📷</div>
+              <div class="stat-info">
+                <div class="stat-label">照片总数</div>
+                <div id="statPhotos" class="stat-value">-</div>
+                <div class="stat-hint">按用户统计汇总</div>
+              </div>
+            </article>
+            <article class="stat-card">
+              <div class="stat-icon">💾</div>
+              <div class="stat-info">
+                <div class="stat-label">总已用空间</div>
+                <div id="statStorageUsed" class="stat-value">-</div>
+                <div class="stat-hint">用户已用空间合计</div>
+              </div>
+            </article>
+          </section>
+
+          <section id="usersPanel" class="panel">
+            <div class="panel-title-row">
+              <h3>用户列表</h3>
+              <span id="usersCountTag" class="count-tag">0 条</span>
+            </div>
+            <div class="panel-head">
+              <input id="userKeyword" placeholder="搜索 OpenID / 昵称">
+              <button id="searchUsersBtn" class="btn-primary">查询</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>头像</th>
+                    <th>OpenID</th>
+                    <th>昵称</th>
+                    <th>邮箱</th>
+                    <th>最近登录</th>
+                    <th>相册数</th>
+                    <th>照片数</th>
+                    <th>已使用空间</th>
+                    <th>配额上限</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTbody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="albumsPanel" class="panel hidden">
+            <div class="panel-title-row">
+              <h3>相册列表</h3>
+              <span id="albumsCountTag" class="count-tag">0 条</span>
+            </div>
+            <div class="panel-head">
+              <input id="albumKeyword" placeholder="搜索 相册ID / 名称 / 所有者ID">
+              <button id="searchAlbumsBtn" class="btn-primary">查询</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>相册ID</th>
+                    <th>名称</th>
+                    <th>所有者</th>
+                    <th>默认</th>
+                    <th>照片数</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="albumsTbody"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle"></h3>
+        <button id="closeModalBtn" class="ghost">关闭</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="/cs-server/admin-ui/static/app.js"></script>
+</body>
+</html>
