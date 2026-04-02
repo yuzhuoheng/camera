@@ -55,6 +55,8 @@ def list_users(
         like_keyword = f"%{keyword}%"
         query = query.filter((User.id.like(like_keyword)) | (User.nickname.like(like_keyword)))
 
+    total = query.with_entities(func.count(func.distinct(User.id))).scalar()
+
     rows = (
         query.group_by(
             User.id,
@@ -72,26 +74,31 @@ def list_users(
         .all()
     )
 
-    return [
-        {
-            "id": row.id,
-            "nickname": row.nickname,
-            "email": row.email,
-            "avatar_url": row.avatar_url,
-            "created_at": row.created_at,
-            "last_login_at": row.last_login_at,
-            "album_count": int(row.album_count or 0),
-            "photo_count": int(row.photo_count or 0),
-            "storage_used": int(row.storage_used or 0),
-            "storage_limit": int(row.storage_limit or 0),
-        }
-        for row in rows
-    ]
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": row.id,
+                "nickname": row.nickname,
+                "email": row.email,
+                "avatar_url": row.avatar_url,
+                "created_at": row.created_at,
+                "last_login_at": row.last_login_at,
+                "album_count": int(row.album_count or 0),
+                "photo_count": int(row.photo_count or 0),
+                "storage_used": int(row.storage_used or 0),
+                "storage_limit": int(row.storage_limit or 0),
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.get("/albums")
 def list_albums(
     keyword: Optional[str] = None,
+    sort_by: str = "created_at",
+    order: str = "desc",
     skip: int = 0,
     limit: int = 100,
     _: str = Depends(get_current_admin),
@@ -118,33 +125,50 @@ def list_albums(
             | (Album.owner_id.like(like_keyword))
         )
 
+    total = query.with_entities(func.count(func.distinct(Album.id))).scalar()
+
+    grouped_query = query.group_by(
+        Album.id,
+        Album.name,
+        Album.owner_id,
+        User.nickname,
+        Album.is_default,
+        Album.created_at,
+    )
+
+    if sort_by == "photo_count":
+        if order == "asc":
+            grouped_query = grouped_query.order_by(func.count(Photo.id).asc(), Album.created_at.desc())
+        else:
+            grouped_query = grouped_query.order_by(func.count(Photo.id).desc(), Album.created_at.desc())
+    else:
+        if order == "asc":
+            grouped_query = grouped_query.order_by(Album.created_at.asc())
+        else:
+            grouped_query = grouped_query.order_by(Album.created_at.desc())
+
     rows = (
-        query.group_by(
-            Album.id,
-            Album.name,
-            Album.owner_id,
-            User.nickname,
-            Album.is_default,
-            Album.created_at,
-        )
-        .order_by(Album.created_at.desc())
+        grouped_query
         .offset(skip)
         .limit(limit)
         .all()
     )
 
-    return [
-        {
-            "id": row.id,
-            "name": row.name,
-            "owner_id": row.owner_id,
-            "owner_nickname": row.owner_nickname,
-            "is_default": row.is_default,
-            "created_at": row.created_at,
-            "photo_count": int(row.photo_count or 0),
-        }
-        for row in rows
-    ]
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": row.id,
+                "name": row.name,
+                "owner_id": row.owner_id,
+                "owner_nickname": row.owner_nickname,
+                "is_default": row.is_default,
+                "created_at": row.created_at,
+                "photo_count": int(row.photo_count or 0),
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.get("/albums/{album_id}/photos")

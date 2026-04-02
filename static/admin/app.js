@@ -16,6 +16,8 @@ const el = {
   albumsTbody: document.getElementById("albumsTbody"),
   userKeyword: document.getElementById("userKeyword"),
   albumKeyword: document.getElementById("albumKeyword"),
+  albumSortBy: document.getElementById("albumSortBy"),
+  albumSortOrder: document.getElementById("albumSortOrder"),
   searchUsersBtn: document.getElementById("searchUsersBtn"),
   searchAlbumsBtn: document.getElementById("searchAlbumsBtn"),
   statUsers: document.getElementById("statUsers"),
@@ -24,6 +26,8 @@ const el = {
   statStorageUsed: document.getElementById("statStorageUsed"),
   usersCountTag: document.getElementById("usersCountTag"),
   albumsCountTag: document.getElementById("albumsCountTag"),
+  usersPagination: document.getElementById("usersPagination"),
+  albumsPagination: document.getElementById("albumsPagination"),
   modal: document.getElementById("modal"),
   modalTitle: document.getElementById("modalTitle"),
   modalBody: document.getElementById("modalBody"),
@@ -103,9 +107,9 @@ function mediaProxyUrl(rawUrl) {
 
 function getAvatarCell(user) {
   const avatar = normalizeMediaUrl(user.avatar_url || "");
-  if (!avatar) return `<span class="avatar-fallback">${(user.nickname || "U").slice(0, 1).toUpperCase()}</span>`;
+  if (!avatar) return `<span class="avatar-fallback">${(user.nickname || user.id || "U").slice(0, 1).toUpperCase()}</span>`;
   const src = mediaProxyUrl(avatar);
-  return `<img class="user-avatar" src="${src}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'avatar-fallback',textContent:'U'}))">`;
+  return `<img class="user-avatar" src="${src}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'avatar-fallback',textContent:'${(user.nickname || user.id || "U").slice(0, 1).toUpperCase()}'}))">`;
 }
 
 async function request(path, options = {}) {
@@ -172,12 +176,63 @@ function closeModal() {
   el.modal.classList.add("hidden");
 }
 
-function setUsersRows(users) {
-  el.usersCountTag.textContent = `${users.length} 条`;
-  if (!users.length) {
-    el.usersTbody.innerHTML = `<tr><td colspan="9">暂无数据</td></tr>`;
+let state = {
+  usersPage: 1,
+  usersLimit: 20,
+  usersData: [],
+  albumsPage: 1,
+  albumsLimit: 20,
+  albumsData: []
+};
+
+function renderPagination(container, current, limit, total, onPageChange) {
+  if (!container) return;
+  if (total <= 0) {
+    container.innerHTML = "";
     return;
   }
+  const totalPages = Math.ceil(total / limit);
+  const start = (current - 1) * limit + 1;
+  const end = Math.min(current * limit, total);
+  
+  let html = `<div class="page-info">显示 ${start}-${end} 条，共 ${total} 条</div>`;
+  
+  html += `<button class="page-btn" data-page="${current - 1}" ${current <= 1 ? "disabled" : ""}>上一页</button>`;
+  
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= current - 2 && i <= current + 2)) {
+      html += `<button class="page-btn ${i === current ? "active" : ""}" data-page="${i}">${i}</button>`;
+    } else if (i === current - 3 || i === current + 3) {
+      html += `<span class="page-btn" style="border:none;background:transparent;cursor:default;">...</span>`;
+    }
+  }
+  
+  html += `<button class="page-btn" data-page="${current + 1}" ${current >= totalPages ? "disabled" : ""}>下一页</button>`;
+  
+  container.innerHTML = html;
+  
+  container.querySelectorAll("button.page-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      const targetPage = parseInt(btn.dataset.page, 10);
+      if (targetPage && targetPage !== current) {
+        onPageChange(targetPage);
+      }
+    });
+  });
+}
+
+function setUsersRows(usersData) {
+  const users = Array.isArray(usersData) ? usersData : usersData.items || [];
+  const total = usersData.total !== undefined ? usersData.total : users.length;
+  
+  el.usersCountTag.textContent = `${total} 条`;
+  if (!users.length) {
+    el.usersTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted)">暂无数据</td></tr>`;
+    renderPagination(el.usersPagination, state.usersPage, state.usersLimit, 0, null);
+    return;
+  }
+
   el.usersTbody.innerHTML = users
     .map(
       (u) => `<tr>
@@ -190,18 +245,30 @@ function setUsersRows(users) {
         <td>${fmtInt(u.photo_count)}</td>
         <td>${fmtBytes(u.storage_used)}</td>
         <td>${fmtBytes(u.storage_limit)}</td>
-        <td><button class="small ghost quota-btn" data-user-id="${escapeHtml(u.id)}">配额日志</button></td>
+        <td>
+          <button class="btn-primary small quota-btn" data-user-id="${escapeHtml(u.id)}">配额日志</button>
+        </td>
       </tr>`
     )
     .join("");
+    
+  renderPagination(el.usersPagination, state.usersPage, state.usersLimit, total, (page) => {
+    state.usersPage = page;
+    loadUsers();
+  });
 }
 
-function setAlbumsRows(albums) {
-  el.albumsCountTag.textContent = `${albums.length} 条`;
+function setAlbumsRows(albumsData) {
+  const albums = Array.isArray(albumsData) ? albumsData : albumsData.items || [];
+  const total = albumsData.total !== undefined ? albumsData.total : albums.length;
+  
+  el.albumsCountTag.textContent = `${total} 条`;
   if (!albums.length) {
-    el.albumsTbody.innerHTML = `<tr><td colspan="7">暂无数据</td></tr>`;
+    el.albumsTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted)">暂无数据</td></tr>`;
+    renderPagination(el.albumsPagination, state.albumsPage, state.albumsLimit, 0, null);
     return;
   }
+
   el.albumsTbody.innerHTML = albums
     .map(
       (a) => `<tr>
@@ -215,6 +282,11 @@ function setAlbumsRows(albums) {
       </tr>`
     )
     .join("");
+    
+  renderPagination(el.albumsPagination, state.albumsPage, state.albumsLimit, total, (page) => {
+    state.albumsPage = page;
+    loadAlbums();
+  });
 }
 
 function setStats(users, albums) {
@@ -234,16 +306,38 @@ function setStats(users, albums) {
 
 async function loadUsers() {
   const keyword = el.userKeyword.value.trim();
-  const data = await request(`/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`);
-  setUsersRows(data);
-  return data;
+  const skip = (state.usersPage - 1) * state.usersLimit;
+  const query = new URLSearchParams({ skip, limit: state.usersLimit });
+  if (keyword) query.set("keyword", keyword);
+  
+  el.usersTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted)">加载中...</td></tr>`;
+  try {
+    const users = await request(`/users?${query.toString()}`);
+    setUsersRows(users);
+    return users;
+  } catch (err) {
+    el.usersTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--danger)">加载失败: ${escapeHtml(err.message)}</td></tr>`;
+    return [];
+  }
 }
 
 async function loadAlbums() {
   const keyword = el.albumKeyword.value.trim();
-  const data = await request(`/albums${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`);
-  setAlbumsRows(data);
-  return data;
+  const sortBy = el.albumSortBy ? el.albumSortBy.value : "created_at";
+  const order = el.albumSortOrder ? el.albumSortOrder.value : "desc";
+  const skip = (state.albumsPage - 1) * state.albumsLimit;
+  const query = new URLSearchParams({ skip, limit: state.albumsLimit, sort_by: sortBy, order: order });
+  if (keyword) query.set("keyword", keyword);
+  
+  el.albumsTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted)">加载中...</td></tr>`;
+  try {
+    const albums = await request(`/albums?${query.toString()}`);
+    setAlbumsRows(albums);
+    return albums;
+  } catch (err) {
+    el.albumsTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger)">加载失败: ${escapeHtml(err.message)}</td></tr>`;
+    return [];
+  }
 }
 
 async function refreshDashboard() {
@@ -293,42 +387,29 @@ async function showUserQuotaLogs(userId) {
 async function showAlbumPhotos(albumId, albumName) {
   const photos = await request(`/albums/${encodeURIComponent(albumId)}/photos`);
   const html = `
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>缩略图</th>
-            <th>文件名</th>
-            <th>大小</th>
-            <th>上传者</th>
-            <th>创建时间</th>
-            <th>链接</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            photos.length
-              ? photos
-                  .map((p) => {
-                    const thumb = p.thumbnail_url || p.url || "";
-                    const thumbProxy = mediaProxyUrl(thumb);
-                    const rawLink = normalizeMediaUrl(p.url || "");
-                    const link = rawLink ? `<a href="${escapeHtml(rawLink)}" target="_blank" rel="noopener noreferrer">查看原图</a>` : "-";
-                    const img = thumbProxy ? `<img class="photo-thumb" src="${thumbProxy}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'avatar-fallback',textContent:'无图'}))">` : "-";
-                    return `<tr>
-                      <td>${img}</td>
-                      <td>${escapeHtml(p.filename || "-")}</td>
-                      <td>${fmtBytes(p.size)}</td>
-                      <td>${escapeHtml(p.owner_id || "-")}</td>
-                      <td>${fmtTime(p.created_at)}</td>
-                      <td>${link}</td>
-                    </tr>`;
-                  })
-                  .join("")
-              : `<tr><td colspan="6">该相册暂无照片</td></tr>`
-          }
-        </tbody>
-      </table>
+    <div class="photo-grid">
+      ${
+        photos.length
+          ? photos
+              .map((p) => {
+                const thumb = p.thumbnail_url || p.url || "";
+                const thumbProxy = mediaProxyUrl(thumb);
+                const rawLink = normalizeMediaUrl(p.url || "");
+                const link = rawLink ? `href="${escapeHtml(rawLink)}"` : "";
+                const img = thumbProxy ? `<img class="photo-card-img" src="${thumbProxy}" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'><rect width=\\'100\\' height=\\'100\\' fill=\\'%23edf3ff\\'/><text x=\\'50\\' y=\\'50\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%238593af\\' font-size=\\'14\\'>无图</text></svg>'">` : `<div class="photo-card-img-placeholder">无图</div>`;
+                return `
+                  <a class="photo-card" ${link} target="_blank" rel="noopener noreferrer">
+                    <div class="photo-card-img-wrapper">${img}</div>
+                    <div class="photo-card-info">
+                      <div class="photo-card-time">${fmtTime(p.created_at)}</div>
+                      <div class="photo-card-size">${fmtBytes(p.size)}</div>
+                    </div>
+                  </a>
+                `;
+              })
+              .join("")
+          : `<div class="photo-grid-empty">该相册暂无照片</div>`
+      }
     </div>
   `;
   openModal(`相册照片 · ${albumName || albumId}`, html);
@@ -356,8 +437,14 @@ function bindEvents() {
     setToken("");
     showLogin();
   });
-  el.searchUsersBtn.addEventListener("click", loadUsers);
-  el.searchAlbumsBtn.addEventListener("click", loadAlbums);
+  el.searchUsersBtn.addEventListener("click", () => {
+    state.usersPage = 1;
+    loadUsers();
+  });
+  el.searchAlbumsBtn.addEventListener("click", () => {
+    state.albumsPage = 1;
+    loadAlbums();
+  });
   el.closeModalBtn.addEventListener("click", closeModal);
   el.modal.addEventListener("click", (e) => {
     if (e.target === el.modal) closeModal();
@@ -365,15 +452,20 @@ function bindEvents() {
   for (const tab of el.tabs) {
     tab.addEventListener("click", () => setTab(tab.dataset.tab));
   }
-  el.usersTbody.addEventListener("click", (e) => {
-    const btn = e.target.closest(".quota-btn");
-    if (!btn) return;
-    showUserQuotaLogs(btn.dataset.userId);
-  });
-  el.albumsTbody.addEventListener("click", (e) => {
-    const btn = e.target.closest(".photos-btn");
-    if (!btn) return;
-    showAlbumPhotos(btn.dataset.albumId, btn.dataset.albumName);
+
+  // 修复：事件委托绑定在正确的 DOM 元素上，这里原本可能是绑在 el.usersTbody/albumsTbody 上，
+  // 但我们每次渲染时重写了 innerHTML，必须确保绑定在父容器或直接绑在不被替换的 DOM 上，或者使用全局代理
+  document.body.addEventListener("click", (e) => {
+    const quotaBtn = e.target.closest(".quota-btn");
+    if (quotaBtn) {
+      showUserQuotaLogs(quotaBtn.dataset.userId);
+      return;
+    }
+    const photosBtn = e.target.closest(".photos-btn");
+    if (photosBtn) {
+      showAlbumPhotos(photosBtn.dataset.albumId, photosBtn.dataset.albumName);
+      return;
+    }
   });
 }
 

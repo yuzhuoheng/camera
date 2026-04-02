@@ -118,6 +118,7 @@
                 <tbody id="usersTbody"></tbody>
               </table>
             </div>
+            <div class="pagination" id="usersPagination"></div>
           </section>
 
           <section id="albumsPanel" class="panel hidden">
@@ -127,6 +128,14 @@
             </div>
             <div class="panel-head">
               <input id="albumKeyword" placeholder="搜索 相册ID / 名称 / 所有者ID">
+              <select id="albumSortBy" class="filter-select">
+                <option value="created_at">按创建时间</option>
+                <option value="photo_count">按照片数量</option>
+              </select>
+              <select id="albumSortOrder" class="filter-select">
+                <option value="desc">降序 ↓</option>
+                <option value="asc">升序 ↑</option>
+              </select>
               <button id="searchAlbumsBtn" class="btn-primary">查询</button>
             </div>
             <div class="table-wrap">
@@ -145,6 +154,7 @@
                 <tbody id="albumsTbody"></tbody>
               </table>
             </div>
+            <div class="pagination" id="albumsPagination"></div>
           </section>
         </main>
       </div>
