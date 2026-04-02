@@ -110,7 +110,7 @@ function getAvatarCell(user) {
   const avatar = normalizeMediaUrl(user.avatar_url || "");
   if (!avatar) return `<span class="avatar-fallback">${(user.nickname || user.id || "U").slice(0, 1).toUpperCase()}</span>`;
   const src = mediaProxyUrl(avatar);
-  return `<img class="user-avatar" src="${src}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'avatar-fallback',textContent:'${(user.nickname || user.id || "U").slice(0, 1).toUpperCase()}'}))">`;
+  return `<img class="user-avatar" src="${src}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'avatar-fallback',textContent:'${(user.nickname || user.id || "U").slice(0, 1).toUpperCase()}'}))">`;
 }
 
 async function request(path, options = {}) {
@@ -411,9 +411,9 @@ async function showAlbumPhotos(albumId, albumName) {
                 const ownerName = p.owner_nickname || p.owner_id || "未知用户";
                 const ownerInitial = (ownerName || "U").slice(0, 1).toUpperCase();
                 const ownerAvatarHtml = ownerAvatarProxy
-                  ? `<img class="photo-owner-avatar" src="${ownerAvatarProxy}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'photo-owner-avatar-fallback',textContent:'${escapeHtml(ownerInitial)}'}))">`
+                  ? `<img class="photo-owner-avatar" src="${ownerAvatarProxy}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'), {className:'photo-owner-avatar-fallback',textContent:'${escapeHtml(ownerInitial)}'}))">`
                   : `<span class="photo-owner-avatar-fallback">${escapeHtml(ownerInitial)}</span>`;
-                const img = thumbProxy ? `<img class="photo-card-img" src="${thumbProxy}" alt="" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'><rect width=\\'100\\' height=\\'100\\' fill=\\'%23edf3ff\\'/><text x=\\'50\\' y=\\'50\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%238593af\\' font-size=\\'14\\'>无图</text></svg>'">` : `<div class="photo-card-img-placeholder">无图</div>`;
+                const img = thumbProxy ? `<img class="photo-card-img" src="${thumbProxy}" alt="" loading="lazy" decoding="async" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'><rect width=\\'100\\' height=\\'100\\' fill=\\'%23edf3ff\\'/><text x=\\'50\\' y=\\'50\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' fill=\\'%238593af\\' font-size=\\'14\\'>无图</text></svg>'">` : `<div class="photo-card-img-placeholder">无图</div>`;
                 return `
                   <a class="photo-card" ${link} target="_blank" rel="noopener noreferrer">
                     <div class="photo-card-img-wrapper">${img}</div>

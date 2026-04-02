@@ -48,7 +48,7 @@ def list_users(
             func.count(func.distinct(Photo.id)).label("photo_count"),
         )
         .outerjoin(Album, Album.owner_id == User.id)
-        .outerjoin(Photo, Photo.owner_id == User.id)
+        .outerjoin(Photo, Photo.album_id == Album.id)
     )
 
     if keyword:
